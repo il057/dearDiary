@@ -31,7 +31,7 @@ export const diaryApi = {
   },
 
   reindexSingle(id) {
-    return api.post(`/diaries/${id}/reindex`)
+    return api.post(`/diaries/${id}/reindex`, null, { timeout: 120000 })
   },
   
   search(q) {

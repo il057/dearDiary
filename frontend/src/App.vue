@@ -385,8 +385,9 @@ const handleReindexSingle = async (id) => {
       selectedDiary.value = res.data
     }
     showToast('重算完成')
-  } catch {
-    showToast('重算失败', 'error')
+  } catch (err) {
+    const msg = err?.response?.data?.detail || '重算失败（远端模型可能超时）'
+    showToast(msg, 'error')
   } finally {
     processingIds.delete(id)
   }

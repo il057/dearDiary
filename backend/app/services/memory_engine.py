@@ -150,7 +150,7 @@ class MemoryEngine:
         db.refresh(diary)
         return diary
 
-    def process_single_diary_memory(self, diary_id: int) -> DiaryOut:
+    def process_single_diary_memory(self, diary_id: int, raise_on_llm_error: bool = False) -> DiaryOut:
         db = SessionLocal()
         try:
             diary = db.query(Diary).filter(Diary.id == diary_id).first()
@@ -181,7 +181,11 @@ class MemoryEngine:
                     print(f"[LanceDB error]: {e}")
 
             try:
-                extracted = llm_service.extract_entities_and_relations(content, diary_date=diary.created_at)
+                extracted = llm_service.extract_entities_and_relations(
+                    content,
+                    diary_date=diary.created_at,
+                    raise_on_error=raise_on_llm_error
+                )
                 if extracted.get("mood"):
                     diary.mood = extracted.get("mood")
 
@@ -192,6 +196,8 @@ class MemoryEngine:
                 self.cleanup_orphan_entities(db)
             except Exception as e:
                 print(f"[LLM error]: {e}")
+                if raise_on_llm_error:
+                    raise
 
             db.refresh(diary)
             color = diary.mood_color or vector_to_hex_color(vector)

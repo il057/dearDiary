@@ -137,10 +137,13 @@
                 </div>
 
                 <div class="flex items-center space-x-1">
-                  <span v-if="item.mood" class="px-1.5 py-0.5 bg-[#16090c] text-[#f43f5e] border border-[#dc143c]/25 rounded-xs text-[10px]">
+                  <span
+                    v-if="processingIds.has(item.id || item.diary_id)"
+                    class="w-10 h-4 bg-[#180c10] border border-[#dc143c]/25 rounded-xs animate-pulse"
+                  ></span>
+                  <span v-else-if="item.mood" class="px-1.5 py-0.5 bg-[#16090c] text-[#f43f5e] border border-[#dc143c]/25 rounded-xs text-[10px]">
                     {{ item.mood }}
                   </span>
-                  <span v-if="processingIds.has(item.id || item.diary_id)" class="text-[#dc143c] text-[10px] leading-none animate-pulse">✧</span>
                 </div>
               </div>
 
@@ -158,7 +161,12 @@
 
             <!-- 底部语义实体标签栏 -->
             <div class="mt-3 pt-2 border-t border-[#141418] flex items-center justify-between text-[11px] text-zinc-500">
-              <div class="flex flex-wrap items-center gap-1 overflow-hidden max-h-5">
+              <div v-if="processingIds.has(item.id || item.diary_id)" class="flex items-center gap-1.5">
+                <span class="w-10 h-4 bg-[#0d0d12] border border-[#1d1d26] rounded-xs animate-pulse"></span>
+                <span class="w-14 h-4 bg-[#0d0d12] border border-[#1d1d26] rounded-xs animate-pulse"></span>
+                <span class="w-12 h-4 bg-[#0d0d12] border border-[#1d1d26] rounded-xs animate-pulse"></span>
+              </div>
+              <div v-else class="flex flex-wrap items-center gap-1 overflow-hidden max-h-5">
                 <span
                   v-for="ent in (item.entities || item.related_entities || []).slice(0, 3)"
                   :key="ent"

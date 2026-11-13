@@ -19,6 +19,14 @@ class LLMClient:
             return f"{ollama_host}/v1"
         return url or "http://localhost:11434/v1"
 
+    @staticmethod
+    def _is_ollama(base_url: str, api_key: str) -> bool:
+        return ":11434" in base_url or (api_key or "").lower() == "ollama"
+
+    @staticmethod
+    def _ollama_root(base_url: str) -> str:
+        return base_url[:-3] if base_url.endswith("/v1") else base_url
+
     def _post_json(self, url: str, api_key: str, payload: Dict[str, Any], timeout: float) -> Dict[str, Any]:
         headers = {"Content-Type": "application/json"}
         if api_key:
@@ -39,17 +47,32 @@ class LLMClient:
 
         try:
             base_url = self._resolve_base_url(settings.EMBEDDING_BASE_URL)
-            result = self._post_json(
-                f"{base_url}/embeddings",
-                settings.EMBEDDING_API_KEY,
-                {
-                    "model": settings.EMBEDDING_MODEL,
-                    "input": cleaned_text[:2000]
-                },
-                timeout=12.0
-            )
-            data = result.get("data") or []
-            vec = data[0].get("embedding", []) if data else result.get("embedding", [])
+            if self._is_ollama(base_url, settings.EMBEDDING_API_KEY):
+                ollama_root = self._ollama_root(base_url)
+                result = self._post_json(
+                    f"{ollama_root}/api/embed",
+                    "",
+                    {
+                        "model": settings.EMBEDDING_MODEL,
+                        "input": cleaned_text[:2000],
+                        "keep_alive": 0
+                    },
+                    timeout=15.0
+                )
+                embeddings = result.get("embeddings") or []
+                vec = embeddings[0] if embeddings else result.get("embedding", [])
+            else:
+                result = self._post_json(
+                    f"{base_url}/embeddings",
+                    settings.EMBEDDING_API_KEY,
+                    {
+                        "model": settings.EMBEDDING_MODEL,
+                        "input": cleaned_text[:2000]
+                    },
+                    timeout=15.0
+                )
+                data = result.get("data") or []
+                vec = data[0].get("embedding", []) if data else result.get("embedding", [])
             if len(vec) == settings.EMBEDDING_DIM:
                 return vec
             elif len(vec) > settings.EMBEDDING_DIM:
@@ -65,7 +88,7 @@ class LLMClient:
         rng = random.Random(seed)
         return [rng.uniform(-0.1, 0.1) for _ in range(settings.EMBEDDING_DIM)]
 
-    def extract_entities_and_relations(self, text: str, diary_date=None) -> Dict[str, Any]:
+    def extract_entities_and_relations(self, text: str, diary_date=None, raise_on_error: bool = False) -> Dict[str, Any]:
         """
         开源通用级日记语义理解：
         1. 结合写作日期进行【回忆回溯时间绝对化】（如把过去的年份折算为绝对年份，严禁日记自身的记录年份，严禁“小时候/以前”等模糊词）；
@@ -105,36 +128,71 @@ class LLMClient:
 
         try:
             base_url = self._resolve_base_url(settings.LLM_BASE_URL)
-            payload: Dict[str, Any] = {
-                "model": settings.LLM_MODEL,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.2,
-                "stream": False,
-                "response_format": {"type": "json_object"}
-            }
-            try:
-                res_obj = self._post_json(
-                    f"{base_url}/chat/completions",
-                    settings.LLM_API_KEY,
-                    payload,
-                    timeout=50.0
-                )
-            except urllib.error.HTTPError as http_err:
-                if http_err.code == 400:
-                    payload.pop("response_format", None)
+            if self._is_ollama(base_url, settings.LLM_API_KEY):
+                ollama_root = self._ollama_root(base_url)
+                ollama_payload: Dict[str, Any] = {
+                    "model": settings.LLM_MODEL,
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ],
+                    "stream": False,
+                    "think": False,
+                    "keep_alive": 0,
+                    "format": "json",
+                    "options": {
+                        "temperature": 0.2,
+                        "num_ctx": 4096
+                    }
+                }
+                try:
+                    res_obj = self._post_json(
+                        f"{ollama_root}/api/chat",
+                        "",
+                        ollama_payload,
+                        timeout=90.0
+                    )
+                except urllib.error.HTTPError as http_err:
+                    if http_err.code == 400 and "think" in ollama_payload:
+                        ollama_payload.pop("think", None)
+                        res_obj = self._post_json(
+                            f"{ollama_root}/api/chat",
+                            "",
+                            ollama_payload,
+                            timeout=90.0
+                        )
+                    else:
+                        raise
+                raw = (res_obj.get("message", {}).get("content", "")).strip()
+            else:
+                payload: Dict[str, Any] = {
+                    "model": settings.LLM_MODEL,
+                    "messages": [
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.2,
+                    "stream": False,
+                    "response_format": {"type": "json_object"}
+                }
+                try:
                     res_obj = self._post_json(
                         f"{base_url}/chat/completions",
                         settings.LLM_API_KEY,
                         payload,
-                        timeout=50.0
+                        timeout=90.0
                     )
-                else:
-                    raise
-
-            choices = res_obj.get("choices") or []
-            raw = (choices[0].get("message", {}).get("content", "") if choices else "").strip()
+                except urllib.error.HTTPError as http_err:
+                    if http_err.code == 400:
+                        payload.pop("response_format", None)
+                        res_obj = self._post_json(
+                            f"{base_url}/chat/completions",
+                            settings.LLM_API_KEY,
+                            payload,
+                            timeout=90.0
+                        )
+                    else:
+                        raise
+                choices = res_obj.get("choices") or []
+                raw = (choices[0].get("message", {}).get("content", "") if choices else "").strip()
 
             if "</think>" in raw:
                 raw = raw.split("</think>")[-1].strip()
@@ -224,6 +282,8 @@ class LLMClient:
                     })
         except Exception as e:
             print(f"[LLM extraction error]: {e}")
+            if raise_on_error:
+                raise
 
         # 结合知识库词典做 100% 保底扫描（确保单字人名、朋友昵称绝不漏采）
         scanned_custom = knowledge_base.scan_custom_entities(text)

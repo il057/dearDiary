@@ -110,7 +110,10 @@ def recolor_all_diaries(db: Session = Depends(get_db)):
 
 @app.post("/api/diaries/{diary_id}/reindex", response_model=DiaryOut)
 def reindex_single_diary(diary_id: int):
-    res = memory_engine.process_single_diary_memory(diary_id)
+    try:
+        res = memory_engine.process_single_diary_memory(diary_id, raise_on_llm_error=True)
+    except Exception as e:
+        raise HTTPException(status_code=504, detail=f"远端模型推理超时或失败: {e}")
     if not res:
         raise HTTPException(status_code=404, detail="日记不存在")
     return res

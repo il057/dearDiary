@@ -27,7 +27,8 @@
         <template v-if="!isEditing">
           <button
             @click="$emit('reindex', diary.id || diary.diary_id)"
-            class="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-[#16161c] rounded-xs border border-neutral-800 transition-colors cursor-pointer"
+            :disabled="isProcessing"
+            class="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-[#16161c] rounded-xs border border-neutral-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
             title="重新提取实体与心境"
           >
             <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin text-[#dc143c]': isProcessing }" />
@@ -102,15 +103,20 @@
           <div class="flex items-center space-x-3">
             <!-- 情绪星标 -->
             <span
-              class="text-sm leading-none"
+              class="text-sm leading-none transition-opacity"
+              :class="{ 'animate-pulse': isProcessing }"
               :style="{
                 color: diary.mood_color || '#dc143c'
               }"
             >✦</span>
 
-            <!-- 心情标签 -->
-            <span v-if="diary.mood" class="px-2 py-0.5 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/40 rounded-xs text-[11px]">
-              心境: {{ diary.mood }}
+            <!-- 心情标签 (重算时展示骨架屏) -->
+            <span
+              v-if="isProcessing"
+              class="w-16 h-5 bg-[#180c10] border border-[#dc143c]/25 rounded-xs animate-pulse"
+            ></span>
+            <span v-else-if="diary.mood" class="px-2 py-0.5 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/40 rounded-xs text-[11px]">
+              {{ diary.mood }}
             </span>
 
             <span class="font-mono text-zinc-400">{{ formatCleanTime(diary.created_at) }}</span>
@@ -134,10 +140,22 @@
         <div class="pt-6 border-t border-[#18181f] space-y-3 select-none">
           <div class="flex items-center justify-between text-xs text-zinc-500">
             <span class="font-mono uppercase tracking-wider text-[11px]">关联实体标签</span>
-            <span class="text-[10px]">点击实体可在全库中联动探索</span>
+            <span v-if="isProcessing" class="text-[10px] text-[#f43f5e] font-mono inline-flex items-center space-x-1">
+              <span class="animate-pulse">✦</span>
+              <span>正在重算心境与实体标签...</span>
+            </span>
+            <span v-else class="text-[10px]">点击实体可在全库中联动探索</span>
           </div>
 
-          <div class="flex flex-wrap items-center gap-2">
+          <!-- 重算骨架屏占位 -->
+          <div v-if="isProcessing" class="flex flex-wrap items-center gap-2">
+            <span class="w-14 h-6 bg-[#0e0e13] border border-[#1f1f28] rounded-xs animate-pulse"></span>
+            <span class="w-20 h-6 bg-[#0e0e13] border border-[#1f1f28] rounded-xs animate-pulse"></span>
+            <span class="w-16 h-6 bg-[#0e0e13] border border-[#1f1f28] rounded-xs animate-pulse"></span>
+            <span class="w-24 h-6 bg-[#0e0e13] border border-[#1f1f28] rounded-xs animate-pulse"></span>
+          </div>
+
+          <div v-else class="flex flex-wrap items-center gap-2">
             <span
               v-for="ent in (diary.entities || diary.related_entities || [])"
               :key="ent"
