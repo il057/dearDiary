@@ -38,7 +38,7 @@
 
         <!-- 右侧全宽搜索框 -->
         <div class="flex-1 max-w-5xl ml-auto">
-          <HeaderSearch @search="handleSearch" @clear="handleClearSearch" />
+          <HeaderSearch :model-value="currentQuery" @search="handleSearch" @clear="handleClearSearch" />
         </div>
       </div>
     </header>
@@ -184,7 +184,24 @@ import DiaryDetailView from './components/DiaryDetailView.vue'
 import KnowledgeModal from './components/KnowledgeModal.vue'
 import { diaryApi } from './api/diary'
 
-const activeTab = ref('timeline')
+const VIEW_STATE_KEY = 'deardiary_view_state'
+const VALID_TABS = ['timeline', 'book', 'cluster']
+
+const loadViewState = () => {
+  try {
+    const raw = localStorage.getItem(VIEW_STATE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const savedViewState = loadViewState()
+let pendingRestoreDiaryId = savedViewState.selectedDiaryId ?? null
+
+const activeTab = ref(VALID_TABS.includes(savedViewState.activeTab) ? savedViewState.activeTab : 'timeline')
 
 watch(activeTab, (tab) => {
   if (tab === 'cluster' || tab === 'book') {
@@ -195,9 +212,9 @@ watch(activeTab, (tab) => {
   }
 }, { immediate: true })
 const isSideMenuOpen = ref(false)
-const isKnowledgeOpen = ref(false)
-const isComposerOpen = ref(false)
-const composerInitialDate = ref(null)
+const isKnowledgeOpen = ref(Boolean(savedViewState.isKnowledgeOpen))
+const isComposerOpen = ref(Boolean(savedViewState.isComposerOpen))
+const composerInitialDate = ref(savedViewState.composerInitialDate || null)
 const selectedDiary = ref(null)
 
 const diaries = ref([])
@@ -205,8 +222,8 @@ const searchResults = ref([])
 const expandedList = ref([])
 
 const loading = ref(false)
-const isSearchMode = ref(false)
-const currentQuery = ref('')
+const isSearchMode = ref(Boolean(savedViewState.searchQuery))
+const currentQuery = ref(savedViewState.searchQuery || '')
 const processingIds = reactive(new Set())
 const timelineRef = ref(null)
 const notebookRef = ref(null)
@@ -452,11 +469,13 @@ const handleUpdateDiaryEntities = async (payload) => {
   }
 }
 
-const handleSearch = async (q) => {
+const handleSearch = async (q, options = {}) => {
   if (!q) return
   currentQuery.value = q
   isSearchMode.value = true
-  activeTab.value = 'timeline'
+  if (!options.preserveTab) {
+    activeTab.value = 'timeline'
+  }
   loading.value = true
   try {
     const res = await diaryApi.search(q)
@@ -569,17 +588,69 @@ const handleImportJson = async (file) => {
   }
 }
 
+const saveViewState = () => {
+  try {
+    const diaryId = selectedDiary.value
+      ? (selectedDiary.value.id || selectedDiary.value.diary_id)
+      : pendingRestoreDiaryId
+    localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({
+      activeTab: activeTab.value,
+      isKnowledgeOpen: isKnowledgeOpen.value,
+      isComposerOpen: isComposerOpen.value,
+      composerInitialDate: composerInitialDate.value,
+      selectedDiaryId: diaryId,
+      searchQuery: isSearchMode.value ? currentQuery.value : ''
+    }))
+  } catch {
+    // ignore storage quota / privacy mode errors
+  }
+}
+
+watch(
+  [
+    activeTab,
+    isKnowledgeOpen,
+    isComposerOpen,
+    composerInitialDate,
+    () => selectedDiary.value ? (selectedDiary.value.id || selectedDiary.value.diary_id) : null,
+    isSearchMode,
+    currentQuery
+  ],
+  saveViewState
+)
+
+const restoreSelectedDiary = async (id) => {
+  try {
+    const res = await diaryApi.getSingleDiary(id)
+    if (res.data) {
+      selectedDiary.value = res.data
+    }
+  } catch {
+    // 日记可能已被删除，静默清理无效的持久化 ID
+  } finally {
+    pendingRestoreDiaryId = null
+    saveViewState()
+  }
+}
+
 // 当任何全屏独立页面或侧边栏打开时，锁定底层 body 滚动，彻底消除双滚动条与滚动穿透
 watch(
   [isSideMenuOpen, isKnowledgeOpen, isComposerOpen, selectedDiary],
   ([menu, knowledge, composer, detail]) => {
     const hasOverlay = Boolean(menu || knowledge || composer || detail)
     document.body.style.overflow = hasOverlay ? 'hidden' : ''
-  }
+  },
+  { immediate: true }
 )
 
 onMounted(() => {
   fetchDiaries()
+  if (savedViewState.searchQuery) {
+    handleSearch(savedViewState.searchQuery, { preserveTab: true })
+  }
+  if (pendingRestoreDiaryId != null) {
+    restoreSelectedDiary(pendingRestoreDiaryId)
+  }
 })
 
 onBeforeUnmount(() => {

@@ -22,11 +22,22 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { Search, X } from '@lucide/vue'
 
+const props = defineProps({
+  modelValue: {
+    type: String,
+    default: ''
+  }
+})
+
 const emit = defineEmits(['search', 'clear'])
-const queryText = ref('')
+const queryText = ref(props.modelValue || '')
+
+watch(() => props.modelValue, (val) => {
+  queryText.value = val || ''
+})
 
 const handleSearch = () => {
   if (queryText.value.trim()) {

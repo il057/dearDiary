@@ -198,8 +198,10 @@ import { diaryApi } from '../api/diary'
 
 const emit = defineEmits(['open-diary', 'search-entity'])
 
+const CLUSTER_MODE_KEY = 'deardiary_cluster_mode'
+const savedClusterMode = localStorage.getItem(CLUSTER_MODE_KEY)
 const canvasRef = ref(null)
-const graphMode = ref('diary')
+const graphMode = ref(savedClusterMode === 'entity' ? 'entity' : 'diary')
 const loading = ref(false)
 const selectedNode = ref(null)
 const highlightNeighborIds = ref(new Set())
@@ -257,6 +259,11 @@ const selectedEntityRelations = computed(() => {
 const switchGraphMode = (mode) => {
   if (graphMode.value === mode) return
   graphMode.value = mode
+  try {
+    localStorage.setItem(CLUSTER_MODE_KEY, mode)
+  } catch {
+    // ignore
+  }
   clearSelection()
   initGraph()
 }

@@ -487,8 +487,12 @@ const props = defineProps({
 
 defineEmits(['select-diary', 'create-diary'])
 
+const BOOK_PAGE_KEY = 'deardiary_book_page'
 const sortOrder = ref(localStorage.getItem('deardiary_book_sort') || 'desc')
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1024)
+const savedPageRaw = parseInt(localStorage.getItem(BOOK_PAGE_KEY) || '0', 10)
+const savedPageIndex = Number.isFinite(savedPageRaw) && savedPageRaw >= 0 ? savedPageRaw : 0
+let hasRestoredPage = false
 const currentIndex = ref(0)
 
 const isSpread = computed(() => windowWidth.value >= 768)
@@ -778,11 +782,26 @@ const jumpToLast = () => {
 
 defineExpose({ jumpToDate, jumpToFirst, jumpToLast })
 
-watch([() => virtualPages.value.length, isSpread], () => {
+watch([() => virtualPages.value.length, isSpread], ([len]) => {
+  if (len === 0) return
+  if (!hasRestoredPage) {
+    hasRestoredPage = true
+    currentIndex.value = alignIndexForSpread(Math.min(maxIndex.value, savedPageIndex))
+    return
+  }
   if (currentIndex.value > maxIndex.value) {
     currentIndex.value = maxIndex.value
   } else {
     currentIndex.value = alignIndexForSpread(currentIndex.value)
+  }
+})
+
+watch(currentIndex, (idx) => {
+  if (!hasRestoredPage) return
+  try {
+    localStorage.setItem(BOOK_PAGE_KEY, String(idx))
+  } catch {
+    // ignore
   }
 })
 

@@ -4,7 +4,7 @@
     <header class="flex items-center justify-between px-4 sm:px-8 pwa-safe-top pb-3.5 border-b border-[#18181f] bg-[#08080a] select-none shrink-0">
       <div class="flex items-center space-x-3">
         <button
-          @click="$emit('close')"
+          @click="handleClose"
           class="inline-flex items-center space-x-1.5 px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-[#16161c] rounded-xs border border-neutral-800 transition-colors cursor-pointer"
         >
           <ArrowLeft class="w-3.5 h-3.5" />
@@ -116,8 +116,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { ArrowLeft, Check, CalendarClock, Calendar } from '@lucide/vue'
+
+const DRAFT_KEY = 'deardiary_composer_draft'
 
 const props = defineProps({
   initialDate: {
@@ -134,6 +136,19 @@ const isBackfillMode = ref(false)
 const backfillTime = ref('')
 const textareaRef = ref(null)
 
+const clearDraft = () => {
+  try {
+    localStorage.removeItem(DRAFT_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+const handleClose = () => {
+  clearDraft()
+  emit('close')
+}
+
 const getLocalDatetimeString = (dateObj = new Date()) => {
   const pad = (n) => String(n).padStart(2, '0')
   const y = dateObj.getFullYear()
@@ -145,13 +160,45 @@ const getLocalDatetimeString = (dateObj = new Date()) => {
 }
 
 onMounted(() => {
-  if (props.initialDate) {
-    const d = new Date(props.initialDate)
-    d.setHours(12, 0, 0, 0)
-    backfillTime.value = getLocalDatetimeString(d)
-    isBackfillMode.value = true
-  } else {
-    backfillTime.value = getLocalDatetimeString()
+  let restored = false
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (raw) {
+      const draft = JSON.parse(raw)
+      if (draft && typeof draft === 'object') {
+        if (typeof draft.content === 'string') content.value = draft.content
+        if (typeof draft.isBackfillMode === 'boolean') isBackfillMode.value = draft.isBackfillMode
+        if (typeof draft.backfillTime === 'string' && draft.backfillTime) {
+          backfillTime.value = draft.backfillTime
+          restored = true
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  if (!restored) {
+    if (props.initialDate) {
+      const d = new Date(props.initialDate)
+      d.setHours(12, 0, 0, 0)
+      backfillTime.value = getLocalDatetimeString(d)
+      isBackfillMode.value = true
+    } else {
+      backfillTime.value = getLocalDatetimeString()
+    }
+  }
+})
+
+watch([content, isBackfillMode, backfillTime], ([c, backfill, time]) => {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      content: c,
+      isBackfillMode: backfill,
+      backfillTime: time
+    }))
+  } catch {
+    // ignore
   }
 })
 
@@ -183,6 +230,7 @@ const handleSave = () => {
     }
   }
 
+  clearDraft()
   emit('save', {
     content: content.value.trim(),
     created_at: customCreatedAt,
