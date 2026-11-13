@@ -14,7 +14,7 @@
         <div class="flex items-center space-x-2">
           <span class="text-[#dc143c] text-xs leading-none">✦</span>
           <span class="text-xs font-semibold text-zinc-200">
-            {{ isBackfillMode ? '补档往昔日记' : '记录新日记' }}
+            {{ isBackfillMode ? '补记日记' : '写日记' }}
           </span>
           <span class="text-[11px] text-zinc-500 font-mono hidden sm:inline">
             {{ content.trim().length }} 字
@@ -32,10 +32,10 @@
           :class="isBackfillMode
             ? 'bg-[#180a0e] text-[#f43f5e] border-[#dc143c]/60'
             : 'text-zinc-400 hover:text-zinc-200 bg-neutral-900 border-neutral-800'"
-          title="自定义归档时间补记旧日记"
+          title="修改日期"
         >
           <CalendarClock class="w-3.5 h-3.5" />
-          <span>{{ isBackfillMode ? '补档开启' : '补记旧日记' }}</span>
+          <span>{{ isBackfillMode ? '已选日期' : '补记日期' }}</span>
         </button>
 
         <!-- 提交保存按钮 (Crimson 风格) -->
@@ -45,7 +45,7 @@
           class="inline-flex items-center space-x-1.5 px-4 py-1.5 bg-[#dc143c] hover:bg-[#e11d48] text-white font-medium text-xs rounded-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer shadow-[0_0_12px_rgba(220,20,60,0.35)]"
         >
           <Check class="w-3.5 h-3.5" />
-          <span>{{ isBackfillMode ? '保存补档' : '记录存盘' }}</span>
+          <span>保存</span>
         </button>
       </div>
     </header>
@@ -57,7 +57,7 @@
     >
       <div class="flex items-center space-x-2">
         <Calendar class="w-4 h-4 text-[#dc143c]" />
-        <span class="text-zinc-400">选择过往日期时间:</span>
+        <span class="text-zinc-400">日期时间:</span>
         <input
           type="datetime-local"
           v-model="backfillTime"
@@ -81,9 +81,9 @@
         <button
           @click="setNoonTime"
           class="px-2 py-0.5 bg-neutral-900 hover:bg-neutral-800 text-zinc-400 rounded-xs border border-neutral-800 cursor-pointer"
-          title="设为12:00:00，时间轴只显示年月日"
+          title="设为当天"
         >
-          整天(12:00)
+          全天
         </button>
         <button
           @click="resetToNow"
@@ -99,7 +99,7 @@
       <textarea
         ref="textareaRef"
         v-model="content"
-        placeholder="记录此时此刻的想法、随想、长篇记忆，或补记一段过往旧事..."
+        placeholder="写点什么..."
         class="flex-1 w-full bg-transparent text-sm sm:text-base text-zinc-100 placeholder-neutral-600 focus:outline-none resize-none leading-relaxed tracking-wide font-normal"
         autofocus
         @keydown.ctrl.enter="handleSave"

@@ -16,14 +16,14 @@
 
         <div class="flex items-center space-x-2">
           <span class="text-[#dc143c] text-xs leading-none">✦</span>
-          <h3 class="text-xs sm:text-sm font-semibold text-zinc-100 tracking-wider">认知词典与实体管理</h3>
+          <h3 class="text-xs sm:text-sm font-semibold text-zinc-100 tracking-wider">标签与别名</h3>
         </div>
       </div>
 
       <div class="text-[11px] text-zinc-500 font-mono hidden sm:flex items-center space-x-3">
-        <span>别名映射: <strong class="text-zinc-200">{{ Object.keys(aliases).length }}</strong></span>
+        <span>别名: <strong class="text-zinc-200">{{ Object.keys(aliases).length }}</strong></span>
         <span>·</span>
-        <span>实体总数: <strong class="text-[#f43f5e]">{{ Object.keys(entities).length }}</strong></span>
+        <span>标签: <strong class="text-[#f43f5e]">{{ Object.keys(entities).length }}</strong></span>
       </div>
     </header>
 
@@ -37,9 +37,9 @@
             <div class="pb-2.5 border-b border-[#15151a]">
               <div class="flex items-center space-x-2">
                 <span class="text-[#dc143c] text-xs leading-none">✧</span>
-                <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">实体别名归一</h4>
+                <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">别名合并</h4>
               </div>
-              <p class="text-[11px] text-zinc-500 mt-1">将昵称、英文名或简称归并到同一个主实体</p>
+              <p class="text-[11px] text-zinc-500 mt-1">将不同称呼合并为同一个标签</p>
             </div>
 
             <!-- 绑定输入框：两行垂直排列，避免移动端横向溢出 -->
@@ -47,13 +47,13 @@
               <div class="flex flex-col space-y-1.5">
                 <input
                   v-model="newAlias"
-                  placeholder="别名 / 昵称 (如: Alex)"
+                  placeholder="别名（如：Alex）"
                   class="w-full bg-[#050505] border border-[#1e1e26] rounded-xs px-3 py-2 text-zinc-100 text-xs focus:outline-none focus:border-[#dc143c] transition-colors"
                 />
                 <div class="text-center text-[#dc143c] text-xs font-mono leading-none select-none">↓</div>
                 <input
                   v-model="newCanonical"
-                  placeholder="核心主实体 (如: 张三)"
+                  placeholder="合并到（如：张三）"
                   class="w-full bg-[#050505] border border-[#1e1e26] rounded-xs px-3 py-2 text-zinc-100 text-xs focus:outline-none focus:border-[#dc143c] transition-colors"
                   @keydown.enter="handleAddAlias"
                 />
@@ -63,16 +63,16 @@
                 :disabled="!newAlias.trim() || !newCanonical.trim()"
                 class="w-full py-2 bg-[#dc143c] hover:bg-[#e11d48] text-white font-medium text-xs rounded-xs disabled:opacity-35 disabled:pointer-events-none transition-all cursor-pointer"
               >
-                绑定别名映射
+                添加
               </button>
             </div>
 
             <!-- 现有映射列表 -->
             <div class="pt-2 border-t border-[#15151a] space-y-2">
-              <div class="text-[11px] text-zinc-500 font-mono">已有映射 ({{ Object.keys(aliases).length }})</div>
+              <div class="text-[11px] text-zinc-500 font-mono">已添加 ({{ Object.keys(aliases).length }})</div>
 
               <div v-if="Object.keys(aliases).length === 0" class="text-zinc-600 text-xs py-6 text-center border border-dashed border-[#18181f] rounded-xs">
-                暂无别名映射
+                暂无别名
               </div>
 
               <div v-else class="space-y-1.5 max-h-[45vh] overflow-y-auto pr-1">
@@ -106,16 +106,15 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#15151a]">
               <div>
                 <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">
-                  <span class="text-[#dc143c] mr-1.5">✧</span>全局实体标签库 ({{ filteredEntities.length }})
+                  <span class="text-[#dc143c] mr-1.5">✧</span>全部标签 ({{ filteredEntities.length }})
                 </h4>
-                <p class="text-[11px] text-zinc-500 mt-0.5">点击右侧分类按钮实时切换类型；删除将同步移除日记中的关联标签</p>
               </div>
 
               <div class="relative w-full sm:w-56 shrink-0">
                 <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
                 <input
                   v-model="searchQuery"
-                  placeholder="过滤实体名称..."
+                  placeholder="筛选标签..."
                   class="w-full pl-8 pr-7 py-1.5 bg-[#050505] border border-[#1e1e26] rounded-xs text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-[#dc143c]"
                 />
                 <button
@@ -146,7 +145,7 @@
 
             <!-- 实体列表 -->
             <div v-if="filteredEntities.length === 0" class="text-zinc-600 text-xs py-12 text-center border border-dashed border-[#18181f] rounded-xs">
-              没有匹配的实体标签
+              暂无匹配标签
             </div>
 
             <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

@@ -4,12 +4,12 @@
     <div class="flex items-center justify-between mb-3 text-[11px] font-mono">
       <div class="flex items-center space-x-2 text-zinc-400">
         <span class="text-[#dc143c] text-xs leading-none">✦</span>
-        <span class="tracking-wider">近七日足迹</span>
+        <span class="tracking-wider">近七日</span>
         <span class="text-zinc-600 hidden sm:inline">· {{ weekRangeText }}</span>
       </div>
 
       <div class="text-zinc-500">
-        <span>已录 </span>
+        <span>已记 </span>
         <span class="text-[#f43f5e]">{{ writtenDaysCount }}</span>
         <span class="text-zinc-600"> / 7 ✧</span>
       </div>

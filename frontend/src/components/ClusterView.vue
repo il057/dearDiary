@@ -9,9 +9,9 @@
     <div v-if="!loading && nodeCount > 0" class="absolute top-3 left-3 right-16 z-20 flex flex-col gap-2 pointer-events-none">
       <div class="inline-flex items-center space-x-2 text-[11px] font-mono text-zinc-400 bg-[#08080a]/85 backdrop-blur-md border border-[#1c1c24] px-2.5 py-1 rounded-xs w-fit pointer-events-auto">
         <span class="text-[#dc143c] text-xs leading-none">✦</span>
-        <span>星图记忆: <strong class="text-zinc-200">{{ nodeCount }}</strong></span>
+        <span>日记: <strong class="text-zinc-200">{{ nodeCount }}</strong></span>
         <span class="text-zinc-600">·</span>
-        <span>引力连线: <strong class="text-zinc-200">{{ linkCount }}</strong></span>
+        <span>关联: <strong class="text-zinc-200">{{ linkCount }}</strong></span>
         <button
           v-if="highlightTag || selectedNode"
           @click="clearSelection"
@@ -114,7 +114,7 @@
         <span class="text-[#dc143c] animate-pulse">✦</span>
         <span class="text-zinc-700">✧</span>
       </div>
-      <span>正在构建记忆星图...</span>
+      <span>加载中...</span>
     </div>
   </div>
 </template>

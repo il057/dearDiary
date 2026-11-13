@@ -24,7 +24,7 @@
           <button
             @click="isSideMenuOpen = true"
             class="p-2 text-zinc-400 hover:text-zinc-100 hover:bg-[#141418] rounded-xs border border-[#1f1f26] cursor-pointer transition-colors"
-            title="打开导览日历与菜单"
+            title="菜单"
           >
             <Menu class="w-4 h-4" />
           </button>
@@ -52,14 +52,14 @@
       <div v-if="isSearchMode" class="flex items-center justify-between p-3 bg-[#0d0a0b] border border-[#dc143c]/30 rounded-xs text-xs">
         <div class="flex items-center space-x-2 text-zinc-300 flex-wrap gap-y-1">
           <span class="text-[#dc143c] text-xs leading-none">✦</span>
-          <span class="text-zinc-500">语义检索:</span>
+          <span class="text-zinc-500">搜索:</span>
           <span class="font-medium text-[#f43f5e]">"{{ currentQuery }}"</span>
-          <span v-if="expandedList.length" class="text-zinc-500">
-            (扩散关联: {{ expandedList.join(', ') }})
+          <span v-if="relatedExpandedList.length" class="text-zinc-500">
+            (关联: {{ relatedExpandedList.join('、') }})
           </span>
         </div>
         <button @click="handleClearSearch" class="text-zinc-400 hover:text-white underline text-[11px] ml-2 shrink-0 cursor-pointer">
-          退出检索
+          清除搜索
         </button>
       </div>
 
@@ -82,12 +82,11 @@
               <Plus class="w-3.5 h-3.5" />
             </span>
             <span class="font-mono text-zinc-400 group-hover:text-zinc-200">
-              记录此时此刻的想法、随笔，或补档往事...
+              记录此刻的想法...
             </span>
           </div>
           <div class="flex items-center space-x-2">
-            <span class="text-[10px] text-zinc-600 font-mono hidden sm:inline">✧ 新页面专注撰写</span>
-            <span class="text-[#dc143c] text-xs font-mono">✦ 写日记 ➔</span>
+            <span class="text-[#dc143c] text-xs font-mono">✦ 写日记</span>
           </div>
         </div>
 
@@ -97,6 +96,7 @@
           :items="isSearchMode ? searchResults : diaries"
           :loading="loading"
           :processing-ids="processingIds"
+          :highlight-terms="searchHighlightTerms"
           @select-diary="handleSelectDiary"
         />
       </div>
@@ -136,6 +136,7 @@
       v-if="selectedDiary"
       :diary="selectedDiary"
       :is-processing="processingIds.has(selectedDiary.id || selectedDiary.diary_id)"
+      :highlight-terms="searchHighlightTerms"
       @close="selectedDiary = null"
       @update="handleUpdateDiary"
       @delete="handleDeleteDiary"
@@ -155,7 +156,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { Plus, Menu } from '@lucide/vue'
 import HeaderSearch from './components/HeaderSearch.vue'
 import WeeklyTracker from './components/WeeklyTracker.vue'
@@ -192,6 +193,16 @@ const isSearchMode = ref(false)
 const currentQuery = ref('')
 const processingIds = reactive(new Set())
 const timelineRef = ref(null)
+
+const relatedExpandedList = computed(() => {
+  const q = currentQuery.value.trim().toLowerCase()
+  return expandedList.value.filter(e => (e || '').trim().toLowerCase() !== q)
+})
+
+const searchHighlightTerms = computed(() => {
+  if (!isSearchMode.value) return []
+  return [currentQuery.value, ...expandedList.value].filter(Boolean)
+})
 
 const toastMessage = ref('')
 const toastType = ref('success')
@@ -374,7 +385,7 @@ const handleDeleteDiary = async (id) => {
 
 const handleReindexSingle = async (id) => {
   processingIds.add(id)
-  showToast('正在重算本篇向量与实体...')
+  showToast('正在重新分析...')
   try {
     const res = await diaryApi.reindexSingle(id)
     const idx = diaries.value.findIndex(d => (d.id || d.diary_id) === id)
@@ -384,9 +395,9 @@ const handleReindexSingle = async (id) => {
     if (selectedDiary.value && (selectedDiary.value.id || selectedDiary.value.diary_id) === id) {
       selectedDiary.value = res.data
     }
-    showToast('重算完成')
+    showToast('分析完成')
   } catch (err) {
-    const msg = err?.response?.data?.detail || '重算失败（远端模型可能超时）'
+    const msg = err?.response?.data?.detail || '分析失败，请稍后重试'
     showToast(msg, 'error')
   } finally {
     processingIds.delete(id)
@@ -420,7 +431,7 @@ const handleSearch = async (q) => {
     searchResults.value = res.data.results
     expandedList.value = res.data.expanded_entities
   } catch {
-    showToast('检索出错', 'error')
+    showToast('搜索出错', 'error')
   } finally {
     loading.value = false
   }
@@ -441,7 +452,7 @@ const handleFilterTag = (ent) => {
 }
 
 const handleKnowledgeUpdated = async () => {
-  showToast('词典关系已对齐，请按需重算日记')
+  showToast('已更新')
 }
 
 const handleEntityDeleted = (name) => {

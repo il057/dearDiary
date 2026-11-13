@@ -14,7 +14,7 @@
         <div class="flex items-center space-x-2">
           <span class="text-[#dc143c] text-xs leading-none">✦</span>
           <span class="text-xs font-semibold text-zinc-200">
-            {{ isEditing ? '编辑日记记忆' : '日记全貌' }}
+            {{ isEditing ? '编辑日记' : '日记详情' }}
           </span>
           <span class="text-[11px] text-zinc-500 font-mono">
             {{ formatCleanTime(diary.created_at) }}
@@ -29,7 +29,7 @@
             @click="$emit('reindex', diary.id || diary.diary_id)"
             :disabled="isProcessing"
             class="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-[#16161c] rounded-xs border border-neutral-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
-            title="重新提取实体与心境"
+            title="重新分析"
           >
             <RefreshCw class="w-3.5 h-3.5" :class="{ 'animate-spin text-[#dc143c]': isProcessing }" />
           </button>
@@ -78,7 +78,7 @@
         <div class="flex items-center justify-between p-3 bg-[#0a0a0d] border border-[#18181f] rounded-xs text-xs select-none">
           <div class="flex items-center space-x-2">
             <Clock class="w-4 h-4 text-[#dc143c]" />
-            <span class="text-zinc-400">归档日期时间:</span>
+            <span class="text-zinc-400">日期时间:</span>
             <input
               type="datetime-local"
               v-model="editDraftTime"
@@ -131,20 +131,25 @@
           <span>{{ diary.matched_reason }}</span>
         </div>
 
-        <!-- 完整长文内容展示 -->
+        <!-- 完整长文内容展示（支持搜索关键词/实体高亮） -->
         <article class="text-sm sm:text-base text-zinc-200 leading-relaxed sm:leading-loose whitespace-pre-wrap select-text font-normal tracking-wide">
-          {{ diary.content }}
+          <template v-if="highlightTerms.length > 0">
+            <template v-for="(seg, sIdx) in splitHighlightSegments(diary.content, highlightTerms)" :key="sIdx">
+              <mark v-if="seg.match" class="bg-[#dc143c]/25 text-[#fda4af] px-0.5 rounded-xs">{{ seg.text }}</mark>
+              <template v-else>{{ seg.text }}</template>
+            </template>
+          </template>
+          <template v-else>{{ diary.content }}</template>
         </article>
 
-        <!-- 底部语义实体标签栏 -->
+        <!-- 底部标签栏 -->
         <div class="pt-6 border-t border-[#18181f] space-y-3 select-none">
           <div class="flex items-center justify-between text-xs text-zinc-500">
-            <span class="font-mono uppercase tracking-wider text-[11px]">关联实体标签</span>
+            <span class="font-mono uppercase tracking-wider text-[11px]">标签</span>
             <span v-if="isProcessing" class="text-[10px] text-[#f43f5e] font-mono inline-flex items-center space-x-1">
               <span class="animate-pulse">✦</span>
-              <span>正在重算心境与实体标签...</span>
+              <span>正在分析...</span>
             </span>
-            <span v-else class="text-[10px]">点击实体可在全库中联动探索</span>
           </div>
 
           <!-- 重算骨架屏占位 -->
@@ -159,7 +164,10 @@
             <span
               v-for="ent in (diary.entities || diary.related_entities || [])"
               :key="ent"
-              class="group inline-flex items-center text-xs px-2.5 py-1 bg-[#0c0c0f] hover:bg-[#180a0e] text-zinc-300 hover:text-[#f43f5e] rounded-xs border border-neutral-800 hover:border-[#dc143c]/40 transition-colors"
+              class="group inline-flex items-center text-xs px-2.5 py-1 rounded-xs border transition-colors"
+              :class="isEntityHighlighted(ent, highlightTerms)
+                ? 'bg-[#180a0e] text-[#fda4af] border-[#dc143c]/60 font-medium'
+                : 'bg-[#0c0c0f] hover:bg-[#180a0e] text-zinc-300 hover:text-[#f43f5e] border-neutral-800 hover:border-[#dc143c]/40'"
             >
               <span @click="$emit('filter-tag', ent)" class="cursor-pointer">#{{ ent }}</span>
               <button
@@ -205,6 +213,7 @@ import {
   ArrowLeft, RefreshCw, Pencil, Trash2, Check,
   Clock, Sparkles, X, Plus
 } from '@lucide/vue'
+import { splitHighlightSegments, isEntityHighlighted } from '../utils/highlight'
 
 const props = defineProps({
   diary: {
@@ -214,6 +223,10 @@ const props = defineProps({
   isProcessing: {
     type: Boolean,
     default: false
+  },
+  highlightTerms: {
+    type: Array,
+    default: () => []
   }
 })
 

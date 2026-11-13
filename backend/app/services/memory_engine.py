@@ -421,13 +421,15 @@ class MemoryEngine:
 
     def hybrid_associative_search(self, db: Session, query: str, limit: int = 20) -> SearchResponse:
         expanded_entities: Set[str] = set()
+        direct_matched_entities: Set[str] = set()
         entity_reason_map: Dict[str, str] = {}
 
         # 知识库别名对齐（如搜索别名自动扩展主实体）
         canonical = knowledge_base.resolve_entity(query)
         if canonical != query:
             expanded_entities.add(canonical)
-            entity_reason_map[canonical] = f"别名映射:「{query}」即「{canonical}」"
+            direct_matched_entities.add(canonical)
+            entity_reason_map[canonical] = f"别名「{query}」→「{canonical}」"
 
         direct_entities = db.query(Entity).filter(
             or_(Entity.name.ilike(f"%{query}%"), Entity.description.ilike(f"%{query}%"))
@@ -435,7 +437,9 @@ class MemoryEngine:
 
         for ent in direct_entities:
             expanded_entities.add(ent.name)
-            entity_reason_map[ent.name] = f"命中实体「{ent.name}」"
+            direct_matched_entities.add(ent.name)
+            if ent.name not in entity_reason_map:
+                entity_reason_map[ent.name] = f"标签「{ent.name}」"
 
             relations = db.query(EntityRelation).filter(
                 or_(EntityRelation.source_name == ent.name, EntityRelation.target_name == ent.name)
@@ -445,7 +449,11 @@ class MemoryEngine:
                 other = r.target_name if r.source_name == ent.name else r.source_name
                 if other not in expanded_entities:
                     expanded_entities.add(other)
-                    entity_reason_map[other] = f"图扩散召回: 与「{ent.name}」关系「{r.relation}」"
+                    rel_label = (r.relation or "").strip()
+                    if rel_label and rel_label not in ("提及", "相关", "关联"):
+                        entity_reason_map[other] = f"关联「{other}」（与「{ent.name}」· {rel_label}）"
+                    else:
+                        entity_reason_map[other] = f"关联「{other}」（与「{ent.name}」相关）"
 
         graph_diary_scores: Dict[int, Dict[str, Any]] = {}
         if expanded_entities:
@@ -457,19 +465,27 @@ class MemoryEngine:
                 ent_name = b.entity.name if b.entity else ""
                 if not ent_name:
                     continue
-                reason = entity_reason_map.get(ent_name, f"提及实体「{ent_name}」")
                 if did not in graph_diary_scores:
                     graph_diary_scores[did] = {
                         "diary_id": did,
                         "boost": 1.2,
-                        "reasons": [reason],
                         "entities": [ent_name]
                     }
                 else:
                     graph_diary_scores[did]["boost"] += 0.3
-                    graph_diary_scores[did]["reasons"].append(reason)
                     if ent_name not in graph_diary_scores[did]["entities"]:
                         graph_diary_scores[did]["entities"].append(ent_name)
+
+            # 优先展示直接命中的标签原因；仅在没有直接命中时展示图谱关联原因，避免冗余
+            for info in graph_diary_scores.values():
+                direct_ents = [e for e in info["entities"] if e in direct_matched_entities]
+                target_ents = direct_ents if direct_ents else info["entities"]
+                reasons = []
+                for e in target_ents:
+                    r_text = entity_reason_map.get(e, f"标签「{e}」")
+                    if r_text not in reasons:
+                        reasons.append(r_text)
+                info["reasons"] = reasons
 
         query_vector = llm_service.get_embedding(query)
         vector_matches = vector_store.search_similar(query_vector, limit=limit)
@@ -503,19 +519,19 @@ class MemoryEngine:
 
             if g_info and v_score > 0:
                 final_score = v_score * g_info["boost"]
-                reason = f"混合匹配: 向量相似 + {', '.join(g_info['reasons'])}"
+                reason = " · ".join(g_info["reasons"])
                 rel_ents = g_info["entities"]
             elif g_info:
                 final_score = 0.8 * g_info["boost"]
-                reason = f"{'; '.join(g_info['reasons'])}"
+                reason = " · ".join(g_info["reasons"])
                 rel_ents = g_info["entities"]
             elif v_score > 0:
                 final_score = v_score
-                reason = "语义向量相似"
+                reason = "内容相关"
                 rel_ents = [b.entity.name for b in d.entities if b.entity]
             else:
                 final_score = 0.5
-                reason = "关键词字面匹配"
+                reason = f"包含「{query}」"
                 rel_ents = [b.entity.name for b in d.entities if b.entity]
 
             had_color = bool(d.mood_color)

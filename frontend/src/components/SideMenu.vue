@@ -18,7 +18,7 @@
       <div class="flex items-center justify-between px-4 pb-3.5 pwa-safe-top border-b border-[#18181d] shrink-0">
         <div class="flex items-center space-x-2">
           <span class="text-[#dc143c] text-xs leading-none">✦</span>
-          <span class="text-xs font-semibold text-zinc-100 uppercase tracking-widest">导览与日历</span>
+          <span class="text-xs font-semibold text-zinc-100 uppercase tracking-widest">菜单</span>
         </div>
         <button
           @click="$emit('close')"
@@ -34,8 +34,8 @@
         <!-- 1. 浏览模式切换 -->
         <div class="space-y-2">
           <div class="text-[11px] text-zinc-500 font-mono uppercase tracking-wider flex items-center justify-between">
-            <span><span class="text-[#dc143c] mr-1">✧</span>浏览模式</span>
-            <span class="text-[10px] text-zinc-600">VIEW MODE</span>
+            <span><span class="text-[#dc143c] mr-1">✧</span>视图</span>
+            <span class="text-[10px] text-zinc-600">VIEW</span>
           </div>
           <div class="grid grid-cols-2 gap-2 bg-[#0c0c10] p-1 border border-[#1a1a20] rounded-xs">
             <button
@@ -56,7 +56,7 @@
                 : 'text-zinc-400 hover:text-zinc-200 border border-transparent'"
             >
               <Boxes class="w-3.5 h-3.5" />
-              <span>星系聚类</span>
+              <span>星图</span>
             </button>
           </div>
         </div>
@@ -64,7 +64,7 @@
         <!-- 2. 日历与时光穿梭 -->
         <div class="space-y-3">
           <div class="text-[11px] text-zinc-500 font-mono uppercase tracking-wider flex items-center justify-between">
-            <span><span class="text-[#dc143c] mr-1">✧</span>时光日历</span>
+            <span><span class="text-[#dc143c] mr-1">✧</span>日历</span>
             <span class="text-[10px] text-zinc-600">CALENDAR</span>
           </div>
 
@@ -155,16 +155,16 @@
               class="flex items-center justify-center space-x-1.5 py-1.5 bg-[#0e0e12] hover:bg-[#16161c] border border-[#1e1e24] text-zinc-300 rounded-xs text-[11px] cursor-pointer transition-colors"
             >
               <ArrowDown class="w-3 h-3 text-zinc-400" />
-              <span>穿梭至最初</span>
+              <span>最早</span>
             </button>
           </div>
         </div>
 
-        <!-- 3. 认知记忆管理 -->
+        <!-- 3. 管理与备份 -->
         <div class="space-y-2 pt-3 border-t border-[#18181d]">
           <div class="text-[11px] text-zinc-500 font-mono uppercase tracking-wider flex items-center justify-between">
-            <span><span class="text-[#dc143c] mr-1">✧</span>记忆系统</span>
-            <span class="text-[10px] text-zinc-600">SYSTEM</span>
+            <span><span class="text-[#dc143c] mr-1">✧</span>管理</span>
+            <span class="text-[10px] text-zinc-600">MANAGE</span>
           </div>
 
           <button
@@ -173,7 +173,7 @@
           >
             <div class="flex items-center space-x-2">
               <Sparkles class="w-4 h-4 text-[#dc143c]" />
-              <span class="font-medium">认知词典与实体管理</span>
+              <span class="font-medium">标签与别名</span>
             </div>
             <ChevronRight class="w-3.5 h-3.5 text-zinc-500" />
           </button>
@@ -184,7 +184,7 @@
               <button
                 @click="$emit('export-json')"
                 class="flex items-center justify-center space-x-1.5 p-2 bg-[#0c0c10] hover:bg-[#16161b] border border-[#1a1a20] hover:border-[#2a2a35] rounded-xs text-zinc-300 text-[11px] transition-colors cursor-pointer"
-                title="导出完整 JSON 备份（支持无损导入还原）"
+                title="导出 JSON 备份"
               >
                 <Download class="w-3.5 h-3.5 text-[#dc143c]" />
                 <span>导出 JSON</span>
@@ -193,7 +193,7 @@
               <button
                 @click="$emit('export-md')"
                 class="flex items-center justify-center space-x-1.5 p-2 bg-[#0c0c10] hover:bg-[#16161b] border border-[#1a1a20] hover:border-[#2a2a35] rounded-xs text-zinc-300 text-[11px] transition-colors cursor-pointer"
-                title="导出适合阅读的 Markdown 文本"
+                title="导出 Markdown"
               >
                 <FileText class="w-3.5 h-3.5 text-zinc-400" />
                 <span>导出 MD</span>
@@ -203,10 +203,10 @@
             <button
               @click="triggerFileInput"
               class="w-full flex items-center justify-center space-x-1.5 p-2 bg-[#0c0c10] hover:bg-[#180a0e] border border-dashed border-[#24242e] hover:border-[#dc143c]/60 rounded-xs text-zinc-300 hover:text-[#f43f5e] text-[11px] transition-colors cursor-pointer"
-              title="从 JSON 备份文件导入日记（自动去重）"
+              title="导入 JSON 备份"
             >
               <Upload class="w-3.5 h-3.5" />
-              <span>导入日记备份 (JSON)</span>
+              <span>导入 JSON</span>
             </button>
             <input
               ref="fileInputRef"
@@ -222,7 +222,7 @@
       <!-- 底栏安全区与 ASCII 星图签名 -->
       <div class="px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] border-t border-[#18181d] text-center font-mono select-none space-y-1">
         <pre class="text-[10px] leading-tight text-zinc-600 tracking-widest">✧ ˚｡✧  <span class="text-[#dc143c]">✦</span>  ✧｡˚ ✧</pre>
-        <div class="text-[10px] text-zinc-600">dearDiary · 私人语义记忆</div>
+        <div class="text-[10px] text-zinc-600">dearDiary</div>
       </div>
     </div>
   </div>

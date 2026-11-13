@@ -6,7 +6,7 @@
         type="text"
         v-model="queryText"
         @keydown.enter="handleSearch"
-        placeholder="语义联想搜索（例如：搜'雪'、'朋友'、'心事'）..."
+        placeholder="搜索日记..."
         class="w-full pl-9 pr-9 py-2 bg-[#0c0c0e] text-xs sm:text-sm text-zinc-100 placeholder-neutral-600 rounded-xs border border-neutral-800 hover:border-neutral-700 focus:border-[#dc143c] focus:outline-none transition-colors"
       />
       <button

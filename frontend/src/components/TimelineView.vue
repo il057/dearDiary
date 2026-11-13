@@ -7,7 +7,7 @@
     >
       <div class="flex items-center space-x-2 shrink-0">
         <span class="text-[#dc143c] text-xs leading-none">✦</span>
-        <span class="text-zinc-400 font-medium font-mono text-[11px]">年份索引</span>
+        <span class="text-zinc-400 font-medium font-mono text-[11px]">年份</span>
       </div>
 
       <!-- 年份胶囊 -->
@@ -52,7 +52,7 @@
         <span class="text-[#dc143c] animate-pulse">✦</span>
         <span class="text-zinc-600">✧</span>
       </div>
-      <span>正在穿梭记忆时间轴...</span>
+      <span>加载中...</span>
     </div>
 
     <!-- 空数据提示 (ASCII 星图艺术) -->
@@ -61,7 +61,7 @@
   *   <span class="text-[#dc143c]">✦</span>   .   ✧
     ˚   ✧   *   .
   ✧   .   <span class="text-[#dc143c]">✦</span>   *</pre>
-      <p class="text-zinc-500 text-xs font-mono">✧ 空空如也，随时记录下今日的第一条随想吧 ✧</p>
+      <p class="text-zinc-500 text-xs font-mono">✧ 暂无日记 ✧</p>
     </div>
 
     <!-- 垂直时间线轴 + 按年月分组的有序卡片流 -->
@@ -153,9 +153,15 @@
                 <span class="truncate">{{ item.matched_reason }}</span>
               </div>
 
-              <!-- 正文缩略展示：2-3行截断 -->
+              <!-- 正文缩略展示：2-3行截断（支持搜索关键词/实体高亮） -->
               <p class="text-zinc-300 text-xs sm:text-[13px] leading-relaxed line-clamp-3 font-normal select-none">
-                {{ item.content }}
+                <template v-if="highlightTerms.length > 0">
+                  <template v-for="(seg, sIdx) in splitHighlightSegments(item.content, highlightTerms)" :key="sIdx">
+                    <mark v-if="seg.match" class="bg-[#dc143c]/25 text-[#fda4af] px-0.5 rounded-xs">{{ seg.text }}</mark>
+                    <template v-else>{{ seg.text }}</template>
+                  </template>
+                </template>
+                <template v-else>{{ item.content }}</template>
               </p>
             </div>
 
@@ -170,7 +176,10 @@
                 <span
                   v-for="ent in (item.entities || item.related_entities || []).slice(0, 3)"
                   :key="ent"
-                  class="px-1.5 py-0.2 bg-[#060608] text-zinc-400 rounded-xs border border-[#1a1a20] text-[10px]"
+                  class="px-1.5 py-0.2 rounded-xs border text-[10px]"
+                  :class="isEntityHighlighted(ent, highlightTerms)
+                    ? 'bg-[#180a0e] text-[#fda4af] border-[#dc143c]/60 font-medium'
+                    : 'bg-[#060608] text-zinc-400 border-[#1a1a20]'"
                 >
                   #{{ ent }}
                 </span>
@@ -207,6 +216,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { ArrowUp } from '@lucide/vue'
+import { splitHighlightSegments, isEntityHighlighted } from '../utils/highlight'
 
 const props = defineProps({
   items: {
@@ -220,6 +230,10 @@ const props = defineProps({
   processingIds: {
     type: Set,
     default: () => new Set()
+  },
+  highlightTerms: {
+    type: Array,
+    default: () => []
   }
 })
 
