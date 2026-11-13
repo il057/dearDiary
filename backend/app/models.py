@@ -36,11 +36,12 @@ class Entity(Base):
 class EntityRelation(Base):
     """
     实体间的关联图边（例如：A 是 B 的朋友、C 是 A 的别名、A 在 B 工作）
-    支持关联检索与实体发散扩散
+    支持关联检索与实体发散扩散；diary_id 为空表示用户手动添加，非空表示由该篇日记提取
     """
     __tablename__ = "entity_relations"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    diary_id = Column(Integer, ForeignKey("diaries.id", ondelete="CASCADE"), nullable=True, index=True)
     source_name = Column(String(100), index=True, nullable=False)
     relation = Column(String(100), nullable=False) # 例如：friend_of, alias_of, colleague_of, located_at
     target_name = Column(String(100), index=True, nullable=False)

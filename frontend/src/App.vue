@@ -3,8 +3,8 @@
     class="bg-[#050505] text-zinc-100 flex flex-col justify-between selection:bg-[#dc143c] selection:text-white relative"
     :class="activeTab === 'cluster' ? 'h-[100dvh] overflow-hidden overscroll-none' : 'min-h-screen'"
   >
-    <!-- 全局 Toast 提示通知 (Crimson 风格) -->
-    <div class="fixed top-5 left-0 right-0 z-50 flex justify-center pointer-events-none">
+    <!-- 全局 Toast 提示通知 (Crimson 风格，置于所有全屏浮层之上) -->
+    <div class="fixed top-5 left-0 right-0 z-[100] flex justify-center pointer-events-none">
       <Transition name="toast-slide">
         <div
           v-if="toastMessage"
@@ -103,7 +103,7 @@
 
       <!-- 星系聚类模式 (全宽锁屏展示，禁止 iOS PWA 上下滚动) -->
       <div v-if="activeTab === 'cluster'" class="flex-1 min-h-0 w-full">
-        <ClusterView @open-diary="handleOpenDiaryById" />
+        <ClusterView @open-diary="handleOpenDiaryById" @search-entity="handleFilterTag" />
       </div>
     </main>
 
@@ -143,6 +143,7 @@
       @reindex="handleReindexSingle"
       @filter-tag="handleFilterTag"
       @update-entities="handleUpdateDiaryEntities"
+      @select-related="handleOpenDiaryById"
     />
 
     <!-- 认知词典与别名对齐弹窗 -->
@@ -151,6 +152,7 @@
       @close="isKnowledgeOpen = false"
       @updated="handleKnowledgeUpdated"
       @entity-deleted="handleEntityDeleted"
+      @toast="showToast"
     />
   </div>
 </template>
@@ -282,6 +284,9 @@ const pollDiaryUntilFinished = (id, maxAttempts = 12) => {
           }
           processingIds.delete(id)
           clearInterval(timer)
+          if (hasEntities || hasMood) {
+            showToast('记忆分析完成')
+          }
         }
       }
     } catch {
@@ -448,11 +453,12 @@ const handleFilterTag = (ent) => {
   if (selectedDiary.value) {
     selectedDiary.value = null
   }
+  activeTab.value = 'timeline'
   handleSearch(ent)
 }
 
-const handleKnowledgeUpdated = async () => {
-  showToast('已更新')
+const handleKnowledgeUpdated = async (msg = '已更新') => {
+  showToast(typeof msg === 'string' && msg ? msg : '已更新')
 }
 
 const handleEntityDeleted = (name) => {
@@ -523,7 +529,11 @@ const handleImportJson = async (file) => {
       return
     }
     showToast(`正在导入 ${list.length} 条记录...`)
-    const res = await diaryApi.importDiaries(list)
+    const res = await diaryApi.importDiaries({
+      diaries: list,
+      knowledge: parsed.knowledge || null,
+      relations: parsed.relations || null
+    })
     await fetchDiaries(true)
     isSideMenuOpen.value = false
     showToast(`导入完成: 新增 ${res.data.imported} 篇，跳过重复 ${res.data.skipped} 篇`)

@@ -1,13 +1,17 @@
 import time
 import math
+import re
 import datetime
 from typing import List, Dict, Any, Set, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from app.models import Diary, Entity, EntityRelation, DiaryEntity
 from app.services.llm_client import llm_service
 from app.services.vector_store import vector_store
-from app.schemas import SearchResultItem, SearchResponse, DiaryOut, GraphResponse, GraphNode, GraphLink
+from app.schemas import (
+    SearchResultItem, SearchResponse, DiaryOut, GraphResponse, GraphNode, GraphLink,
+    EntityGraphNode, EntityGraphLink, EntityGraphResponse
+)
 from app.database import SessionLocal
 from app.services.knowledge_base import knowledge_base
 
@@ -79,11 +83,19 @@ def cosine_similarity(v1: List[float], v2: List[float]) -> float:
     return dot / (norm1 * norm2)
 
 class MemoryEngine:
+    def __init__(self):
+        self._graph_cache: Optional[GraphResponse] = None
+
+    def invalidate_graph_cache(self):
+        self._graph_cache = None
+
     def ensure_mood_color(self, db: Session, diary: Diary, commit: bool = True) -> str:
         """优先读取持久化的 mood_color，仅在缺失时计算并回填"""
         if diary.mood_color:
             return diary.mood_color
-        vec = llm_service.get_embedding(diary.content[:100])
+        vec = llm_service.get_embedding(diary.content[:200])
+        if not vec:
+            return "#dc143c"
         color = vector_to_hex_color(vec)
         diary.mood_color = color
         if commit:
@@ -158,23 +170,31 @@ class MemoryEngine:
                 return None
 
             content = diary.content
-            vector = None
-            for attempt in range(3):
-                try:
-                    vector = llm_service.get_embedding(content)
-                    if vector and len(vector) == 1024:
-                        break
-                except Exception:
-                    time.sleep(0.5)
+            chunks = llm_service.split_text_chunks(content)
+            chunk_vectors: List[Dict[str, Any]] = []
+            primary_vector: Optional[List[float]] = None
 
-            if vector:
-                diary.mood_color = vector_to_hex_color(vector)
+            for idx, chunk_text in enumerate(chunks):
+                vec = None
+                for _ in range(2):
+                    try:
+                        vec = llm_service.get_embedding(chunk_text)
+                        if vec and len(vec) == 1024:
+                            break
+                    except Exception:
+                        time.sleep(0.4)
+                if vec and len(vec) == 1024:
+                    if primary_vector is None:
+                        primary_vector = vec
+                    chunk_vectors.append({"content": chunk_text, "vector": vec})
+
+            if primary_vector:
+                diary.mood_color = vector_to_hex_color(primary_vector)
                 try:
                     vector_store.delete_by_diary_id(diary.id)
-                    vector_store.add_diary_vector(
+                    vector_store.add_diary_vectors(
                         diary_id=diary.id,
-                        content=content,
-                        vector=vector,
+                        chunks=chunk_vectors,
                         created_at=diary.created_at.isoformat()
                     )
                 except Exception as e:
@@ -186,10 +206,13 @@ class MemoryEngine:
                     diary_date=diary.created_at,
                     raise_on_error=raise_on_llm_error
                 )
+                if extracted.get("summary"):
+                    diary.summary = extracted.get("summary")
                 if extracted.get("mood"):
                     diary.mood = extracted.get("mood")
 
                 db.query(DiaryEntity).filter(DiaryEntity.diary_id == diary.id).delete()
+                db.query(EntityRelation).filter(EntityRelation.diary_id == diary.id).delete()
                 db.commit()
 
                 self._save_entities_and_relations(db, diary, extracted)
@@ -199,8 +222,9 @@ class MemoryEngine:
                 if raise_on_llm_error:
                     raise
 
+            self.invalidate_graph_cache()
             db.refresh(diary)
-            color = diary.mood_color or vector_to_hex_color(vector)
+            color = diary.mood_color or vector_to_hex_color(primary_vector or [])
             return DiaryOut(
                 id=diary.id,
                 content=diary.content,
@@ -221,17 +245,25 @@ class MemoryEngine:
         3. 心境共鸣 (Mood Resonance)：相同心境赋予轻微共鸣引力；
         4. 真正形成如参考图所示的“围绕人物与核心事件的高度致密群落（Community Clusters）”。
         """
-        diaries = db.query(Diary).all()
+        if self._graph_cache is not None:
+            return self._graph_cache
+
+        diaries = (
+            db.query(Diary)
+            .options(joinedload(Diary.entities).joinedload(DiaryEntity.entity))
+            .all()
+        )
         if not diaries:
             return GraphResponse(nodes=[], links=[])
 
-        cached_vectors = {}
+        cached_vectors: Dict[int, List[float]] = {}
         try:
             tbl_data = vector_store.table.to_arrow()
             diary_ids = tbl_data["diary_id"].to_pylist()
             vectors = tbl_data["vector"].to_pylist()
             for did, vec in zip(diary_ids, vectors):
-                cached_vectors[did] = vec
+                if did not in cached_vectors:
+                    cached_vectors[did] = vec
         except Exception:
             pass
 
@@ -242,9 +274,9 @@ class MemoryEngine:
         color_backfilled = False
 
         for d in diaries:
-            vec = cached_vectors.get(d.id) or llm_service.get_embedding(d.content[:100])
+            vec = cached_vectors.get(d.id) or llm_service.get_embedding(d.content[:200])
             cached_vectors[d.id] = vec
-            if not d.mood_color:
+            if not d.mood_color and vec:
                 d.mood_color = vector_to_hex_color(vec)
                 color_backfilled = True
             all_items.append(d)
@@ -341,7 +373,9 @@ class MemoryEngine:
                 mood=d.mood
             ))
 
-        return GraphResponse(nodes=nodes, links=links)
+        resp = GraphResponse(nodes=nodes, links=links)
+        self._graph_cache = resp
+        return resp
 
     def _save_entities_and_relations(self, db: Session, diary: Diary, extracted: dict):
         entities_data = extracted.get("entities", [])
@@ -375,12 +409,14 @@ class MemoryEngine:
             t_name = str(rel.get("target") or "").strip()
             if s_name and t_name and r_type and s_name.lower() != "null" and t_name.lower() != "null":
                 existing = db.query(EntityRelation).filter(
+                    EntityRelation.diary_id == diary.id,
                     EntityRelation.source_name == s_name,
                     EntityRelation.relation == r_type,
                     EntityRelation.target_name == t_name
                 ).first()
                 if not existing:
                     new_rel = EntityRelation(
+                        diary_id=diary.id,
                         source_name=s_name,
                         relation=r_type,
                         target_name=t_name
@@ -392,9 +428,16 @@ class MemoryEngine:
     def cleanup_orphan_entities(self, db: Session):
         """
         自动垃圾回收：
-        检查所有实体，若在 diary_entities 桥接表中没有被任何日记引用（引用计数为 0），
-        则自动物理删除该孤儿实体及其孤立关系，并同步从本地知识库中清除。
+        1. 清理所属日记已不存在的孤立自动提取关系（diary_id 非空但日记已删除）；
+        2. 检查所有实体，若在 diary_entities 桥接表中没有被任何日记引用（引用计数为 0），
+           则自动物理删除该孤儿实体及其孤立关系，并同步从本地知识库中清除。
         """
+        valid_diary_ids = db.query(Diary.id)
+        db.query(EntityRelation).filter(
+            EntityRelation.diary_id.isnot(None),
+            ~EntityRelation.diary_id.in_(valid_diary_ids)
+        ).delete(synchronize_session=False)
+
         orphans = (
             db.query(Entity)
             .outerjoin(DiaryEntity, DiaryEntity.entity_id == Entity.id)
@@ -413,27 +456,43 @@ class MemoryEngine:
 
             # 从实体表中删除
             db.query(Entity).filter(Entity.id.in_(orphan_ids)).delete(synchronize_session=False)
-            db.commit()
 
             # 同步从知识库中移除无引用的孤儿标签
             for name in orphan_names:
                 knowledge_base.remove_entity(name)
+
+        db.commit()
 
     def hybrid_associative_search(self, db: Session, query: str, limit: int = 20) -> SearchResponse:
         expanded_entities: Set[str] = set()
         direct_matched_entities: Set[str] = set()
         entity_reason_map: Dict[str, str] = {}
 
-        # 知识库别名对齐（如搜索别名自动扩展主实体）
+        # 1. 整词别名对齐 + 从自然语言查询中扫描已知实体/别名
         canonical = knowledge_base.resolve_entity(query)
         if canonical != query:
             expanded_entities.add(canonical)
             direct_matched_entities.add(canonical)
             entity_reason_map[canonical] = f"别名「{query}」→「{canonical}」"
 
-        direct_entities = db.query(Entity).filter(
-            or_(Entity.name.ilike(f"%{query}%"), Entity.description.ilike(f"%{query}%"))
-        ).all()
+        for scanned in knowledge_base.scan_custom_entities(query):
+            c_name = scanned["name"]
+            expanded_entities.add(c_name)
+            direct_matched_entities.add(c_name)
+            if c_name not in entity_reason_map:
+                if scanned.get("alias_source"):
+                    entity_reason_map[c_name] = f"别名「{scanned['alias_source']}」→「{c_name}」"
+                else:
+                    entity_reason_map[c_name] = f"标签「{c_name}」"
+
+        all_entities = db.query(Entity).all()
+        query_lower = query.lower()
+        direct_entities = [
+            ent for ent in all_entities
+            if query_lower in ent.name.lower()
+            or (ent.description and query_lower in ent.description.lower())
+            or (len(ent.name) >= 2 and ent.name.lower() in query_lower)
+        ]
 
         for ent in direct_entities:
             expanded_entities.add(ent.name)
@@ -455,11 +514,16 @@ class MemoryEngine:
                     else:
                         entity_reason_map[other] = f"关联「{other}」（与「{ent.name}」相关）"
 
+        # 2. 图谱实体召回
         graph_diary_scores: Dict[int, Dict[str, Any]] = {}
         if expanded_entities:
-            matched_bridges = db.query(DiaryEntity).join(Entity).filter(
-                Entity.name.in_(list(expanded_entities))
-            ).all()
+            matched_bridges = (
+                db.query(DiaryEntity)
+                .options(joinedload(DiaryEntity.entity))
+                .join(Entity)
+                .filter(Entity.name.in_(list(expanded_entities)))
+                .all()
+            )
             for b in matched_bridges:
                 did = b.diary_id
                 ent_name = b.entity.name if b.entity else ""
@@ -468,15 +532,15 @@ class MemoryEngine:
                 if did not in graph_diary_scores:
                     graph_diary_scores[did] = {
                         "diary_id": did,
-                        "boost": 1.2,
+                        "direct_hits": 1 if ent_name in direct_matched_entities else 0,
                         "entities": [ent_name]
                     }
                 else:
-                    graph_diary_scores[did]["boost"] += 0.3
                     if ent_name not in graph_diary_scores[did]["entities"]:
                         graph_diary_scores[did]["entities"].append(ent_name)
+                        if ent_name in direct_matched_entities:
+                            graph_diary_scores[did]["direct_hits"] += 1
 
-            # 优先展示直接命中的标签原因；仅在没有直接命中时展示图谱关联原因，避免冗余
             for info in graph_diary_scores.values():
                 direct_ents = [e for e in info["entities"] if e in direct_matched_entities]
                 target_ents = direct_ents if direct_ents else info["entities"]
@@ -487,24 +551,77 @@ class MemoryEngine:
                         reasons.append(r_text)
                 info["reasons"] = reasons
 
+        graph_ranked_ids = [
+            did for did, _ in sorted(
+                graph_diary_scores.items(),
+                key=lambda kv: (kv[1]["direct_hits"], len(kv[1]["entities"])),
+                reverse=True
+            )
+        ]
+
+        # 3. 向量语义召回（余弦相似度 + 阈值过滤）
         query_vector = llm_service.get_embedding(query)
-        vector_matches = vector_store.search_similar(query_vector, limit=limit)
-
         vector_diary_scores: Dict[int, float] = {}
-        for vm in vector_matches:
-            did = vm.get("diary_id")
-            distance = vm.get("_distance", 1.0)
-            score = max(0.0, 1.0 - (distance / 2.0))
-            vector_diary_scores[did] = score
+        if query_vector:
+            vector_matches = vector_store.search_similar(query_vector, limit=max(limit * 2, 30))
+            for vm in vector_matches:
+                did = vm.get("diary_id")
+                if did is None:
+                    continue
+                distance = float(vm.get("_distance", 1.0))
+                sim = max(0.0, 1.0 - distance)
+                if sim >= 0.30:
+                    vector_diary_scores[did] = sim
 
-        all_diary_ids = set(graph_diary_scores.keys()).union(set(vector_diary_scores.keys()))
-        
+        vector_ranked_ids = [
+            did for did, _ in sorted(vector_diary_scores.items(), key=lambda kv: kv[1], reverse=True)
+        ]
+
+        # 4. 关键词全文召回（始终参与 RRF 融合，避免精确词被向量淹没）
+        terms = [t.strip() for t in re.split(r'[\s,，。！？、；;]+', query) if t.strip()]
+        if not terms:
+            terms = [query]
+        term_filters = []
+        for t in terms[:6]:
+            term_filters.append(Diary.content.ilike(f"%{t}%"))
+            term_filters.append(Diary.summary.ilike(f"%{t}%"))
+        keyword_candidates = (
+            db.query(Diary.id, Diary.content, Diary.summary, Diary.created_at)
+            .filter(or_(*term_filters))
+            .order_by(Diary.created_at.desc())
+            .limit(max(limit * 2, 40))
+            .all()
+        )
+        keyword_hits: Dict[int, int] = {}
+        for row in keyword_candidates:
+            haystack = f"{row.summary or ''}\n{row.content or ''}".lower()
+            hit_cnt = sum(1 for t in terms if t.lower() in haystack)
+            if hit_cnt > 0:
+                keyword_hits[row.id] = hit_cnt
+        keyword_ranked_ids = [
+            did for did, _ in sorted(keyword_hits.items(), key=lambda kv: kv[1], reverse=True)
+        ]
+
+        # 5. RRF 倒数排名融合 (Graph + Vector + Keyword)
+        rrf_k = 30.0
+        rrf_scores: Dict[int, float] = {}
+        for rank, did in enumerate(graph_ranked_ids, start=1):
+            rrf_scores[did] = rrf_scores.get(did, 0.0) + 1.35 / (rrf_k + rank)
+        for rank, did in enumerate(vector_ranked_ids, start=1):
+            rrf_scores[did] = rrf_scores.get(did, 0.0) + 1.0 / (rrf_k + rank)
+        for rank, did in enumerate(keyword_ranked_ids, start=1):
+            rrf_scores[did] = rrf_scores.get(did, 0.0) + 1.15 / (rrf_k + rank)
+
+        all_diary_ids = set(rrf_scores.keys())
         if not all_diary_ids:
-            text_matches = db.query(Diary).filter(Diary.content.ilike(f"%{query}%")).limit(limit).all()
-            for tm in text_matches:
-                all_diary_ids.add(tm.id)
+            return SearchResponse(query=query, expanded_entities=list(expanded_entities), results=[])
 
-        diaries = db.query(Diary).filter(Diary.id.in_(list(all_diary_ids))).all()
+        diaries = (
+            db.query(Diary)
+            .options(joinedload(Diary.entities).joinedload(DiaryEntity.entity))
+            .filter(Diary.id.in_(list(all_diary_ids)))
+            .all()
+        )
         diary_map = {d.id: d for d in diaries}
 
         result_items: List[SearchResultItem] = []
@@ -516,23 +633,18 @@ class MemoryEngine:
 
             v_score = vector_diary_scores.get(did, 0.0)
             g_info = graph_diary_scores.get(did)
+            k_hits = keyword_hits.get(did, 0)
+            final_score = rrf_scores[did]
 
-            if g_info and v_score > 0:
-                final_score = v_score * g_info["boost"]
-                reason = " · ".join(g_info["reasons"])
-                rel_ents = g_info["entities"]
-            elif g_info:
-                final_score = 0.8 * g_info["boost"]
-                reason = " · ".join(g_info["reasons"])
-                rel_ents = g_info["entities"]
-            elif v_score > 0:
-                final_score = v_score
-                reason = "内容相关"
-                rel_ents = [b.entity.name for b in d.entities if b.entity]
-            else:
-                final_score = 0.5
-                reason = f"包含「{query}」"
-                rel_ents = [b.entity.name for b in d.entities if b.entity]
+            reasons: List[str] = []
+            if g_info:
+                reasons.extend(g_info["reasons"])
+            if k_hits > 0:
+                reasons.append(f"包含「{query}」" if len(terms) == 1 else f"匹配 {k_hits} 个关键词")
+            if not reasons and v_score > 0:
+                reasons.append("语义相近")
+
+            rel_ents = g_info["entities"] if g_info else [b.entity.name for b in d.entities if b.entity]
 
             had_color = bool(d.mood_color)
             color = self.ensure_mood_color(db, d, commit=False)
@@ -546,8 +658,8 @@ class MemoryEngine:
                 summary=d.summary,
                 mood=d.mood,
                 mood_color=color,
-                score=round(float(final_score), 3),
-                matched_reason=reason,
+                score=round(float(final_score) * 10, 3),
+                matched_reason=" · ".join(reasons[:3]),
                 related_entities=rel_ents
             ))
 
@@ -561,5 +673,146 @@ class MemoryEngine:
             expanded_entities=list(expanded_entities),
             results=result_items[:limit]
         )
+
+    def get_related_diaries(self, db: Session, diary_id: int, limit: int = 5) -> List[SearchResultItem]:
+        """为指定日记推荐最相关的历史记忆（向量相似度 + 共享实体 + 心境共鸣）"""
+        target = (
+            db.query(Diary)
+            .options(joinedload(Diary.entities).joinedload(DiaryEntity.entity))
+            .filter(Diary.id == diary_id)
+            .first()
+        )
+        if not target:
+            return []
+
+        target_entities = {b.entity.name for b in target.entities if b.entity}
+
+        # 优先复用 LanceDB 中该日记的向量
+        target_vec: Optional[List[float]] = None
+        try:
+            tbl_data = vector_store.table.to_arrow()
+            for did, vec in zip(tbl_data["diary_id"].to_pylist(), tbl_data["vector"].to_pylist()):
+                if did == diary_id:
+                    target_vec = vec
+                    break
+        except Exception:
+            pass
+        if not target_vec:
+            target_vec = llm_service.get_embedding(target.content[:800])
+
+        vector_scores: Dict[int, float] = {}
+        if target_vec:
+            for vm in vector_store.search_similar(target_vec, limit=max(limit * 3, 15)):
+                did = vm.get("diary_id")
+                if did is None or did == diary_id:
+                    continue
+                sim = max(0.0, 1.0 - float(vm.get("_distance", 1.0)))
+                if sim >= 0.35:
+                    vector_scores[did] = sim
+
+        # 共享实体候选
+        entity_candidate_ids: Set[int] = set()
+        if target_entities:
+            bridges = (
+                db.query(DiaryEntity.diary_id)
+                .join(Entity)
+                .filter(Entity.name.in_(list(target_entities)), DiaryEntity.diary_id != diary_id)
+                .all()
+            )
+            entity_candidate_ids = {row[0] for row in bridges}
+
+        candidate_ids = set(vector_scores.keys()) | entity_candidate_ids
+        if not candidate_ids:
+            return []
+
+        peers = (
+            db.query(Diary)
+            .options(joinedload(Diary.entities).joinedload(DiaryEntity.entity))
+            .filter(Diary.id.in_(list(candidate_ids)))
+            .all()
+        )
+
+        items: List[SearchResultItem] = []
+        for p in peers:
+            p_ents = {b.entity.name for b in p.entities if b.entity}
+            shared = target_entities & p_ents
+            v_sim = vector_scores.get(p.id, 0.0)
+            mood_bonus = 0.08 if (target.mood and target.mood == p.mood) else 0.0
+
+            if shared:
+                ent_ratio = len(shared) / max(1, len(target_entities | p_ents))
+                score = 0.45 * v_sim + 0.47 * (0.55 + 0.45 * ent_ratio) + mood_bonus
+                reason = f"共同提及: {'、'.join(list(shared)[:3])}"
+            else:
+                score = 0.9 * v_sim + mood_bonus
+                reason = "语义相近" if not mood_bonus else f"语义相近 · 同为「{p.mood}」"
+
+            if score < 0.35:
+                continue
+
+            items.append(SearchResultItem(
+                diary_id=p.id,
+                content=p.content,
+                created_at=p.created_at,
+                summary=p.summary,
+                mood=p.mood,
+                mood_color=p.mood_color or "#dc143c",
+                score=round(float(score), 3),
+                matched_reason=reason,
+                related_entities=list(p_ents)
+            ))
+
+        items.sort(key=lambda x: x.score, reverse=True)
+        return items[:limit]
+
+    def get_entity_graph(self, db: Session) -> EntityGraphResponse:
+        """构建实体与关系知识图谱，供前端可视化"""
+        self.cleanup_orphan_entities(db)
+        owner_name = knowledge_base.get_owner_name()
+        custom_entities = knowledge_base.get_all().get("custom_entities", {})
+
+        counts = dict(
+            db.query(Entity.name, func.count(DiaryEntity.id))
+            .join(DiaryEntity, DiaryEntity.entity_id == Entity.id, isouter=True)
+            .group_by(Entity.name)
+            .all()
+        )
+
+        node_map: Dict[str, EntityGraphNode] = {}
+        for ent in db.query(Entity).all():
+            node_map[ent.name] = EntityGraphNode(
+                id=ent.name,
+                name=ent.name,
+                entity_type=custom_entities.get(ent.name, ent.entity_type or "concept"),
+                count=counts.get(ent.name, 0),
+                is_owner=(ent.name == owner_name)
+            )
+
+        links: List[EntityGraphLink] = []
+        seen_triples: Set[tuple] = set()
+        for rel in db.query(EntityRelation).order_by(EntityRelation.id.desc()).all():
+            triple = (rel.source_name, rel.relation, rel.target_name)
+            if triple in seen_triples:
+                continue
+            seen_triples.add(triple)
+
+            for endpoint in (rel.source_name, rel.target_name):
+                if endpoint not in node_map:
+                    node_map[endpoint] = EntityGraphNode(
+                        id=endpoint,
+                        name=endpoint,
+                        entity_type="person" if endpoint == owner_name else custom_entities.get(endpoint, "concept"),
+                        count=counts.get(endpoint, 0),
+                        is_owner=(endpoint == owner_name)
+                    )
+
+            links.append(EntityGraphLink(
+                source=rel.source_name,
+                target=rel.target_name,
+                relation=rel.relation,
+                weight=rel.weight or 1.0
+            ))
+
+        return EntityGraphResponse(nodes=list(node_map.values()), links=links)
 
 memory_engine = MemoryEngine()

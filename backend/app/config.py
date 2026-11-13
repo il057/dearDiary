@@ -7,10 +7,11 @@ class Settings(BaseSettings):
     # Ollama 服务地址 (本地测试默认 localhost:11434，亦可填入远端迷你主机 Tailscale IP，如 http://100.x.y.z:11434)
     OLLAMA_HOST: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
-    # LLM 配置 (适配本地或远端主机 qwen2.5:7b / 3b)
+    # LLM 配置 (默认 qwen3:8b，适配本地或远端 Ollama / OpenAI 兼容接口)
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "ollama")
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen2.5:3b")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "qwen3:8b")
+    OLLAMA_KEEP_ALIVE: str = os.getenv("OLLAMA_KEEP_ALIVE", "5m")
     
     # Embedding 向量模型配置 (本地 qwen3-embedding:0.6b, 1024 维)
     EMBEDDING_API_KEY: str = os.getenv("EMBEDDING_API_KEY", "ollama")

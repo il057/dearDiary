@@ -55,9 +55,9 @@ class LLMClient:
                     {
                         "model": settings.EMBEDDING_MODEL,
                         "input": cleaned_text[:2000],
-                        "keep_alive": 0
+                        "keep_alive": settings.OLLAMA_KEEP_ALIVE
                     },
-                    timeout=15.0
+                    timeout=20.0
                 )
                 embeddings = result.get("embeddings") or []
                 vec = embeddings[0] if embeddings else result.get("embedding", [])
@@ -69,7 +69,7 @@ class LLMClient:
                         "model": settings.EMBEDDING_MODEL,
                         "input": cleaned_text[:2000]
                     },
-                    timeout=15.0
+                    timeout=20.0
                 )
                 data = result.get("data") or []
                 vec = data[0].get("embedding", []) if data else result.get("embedding", [])
@@ -80,68 +80,140 @@ class LLMClient:
             elif len(vec) > 0:
                 return vec + [0.0] * (settings.EMBEDDING_DIM - len(vec))
         except Exception as e:
-            print(f"[Embedding Info]: {e}")
+            print(f"[Embedding Error]: {e}")
 
-        import hashlib
-        seed = int(hashlib.md5(cleaned_text.encode('utf-8')).hexdigest(), 16)
-        import random
-        rng = random.Random(seed)
-        return [rng.uniform(-0.1, 0.1) for _ in range(settings.EMBEDDING_DIM)]
+        return []
+
+    @staticmethod
+    def split_text_chunks(text: str, chunk_size: int = 800, overlap: int = 150) -> List[str]:
+        """将长日记切分为带重叠的语义分块，确保长文后半段也能被向量召回"""
+        cleaned = re.sub(r'\n{3,}', '\n\n', (text or "").strip())
+        if not cleaned:
+            return []
+        if len(cleaned) <= chunk_size:
+            return [cleaned]
+
+        chunks: List[str] = []
+        start = 0
+        step = max(1, chunk_size - overlap)
+        while start < len(cleaned):
+            end = min(len(cleaned), start + chunk_size)
+            if end < len(cleaned):
+                # 尽量在换行或句号处断开，避免截断词句
+                split_pos = max(
+                    cleaned.rfind('\n', start + chunk_size // 2, end),
+                    cleaned.rfind('。', start + chunk_size // 2, end),
+                    cleaned.rfind('！', start + chunk_size // 2, end),
+                    cleaned.rfind('？', start + chunk_size // 2, end),
+                )
+                if split_pos > start:
+                    end = split_pos + 1
+            chunk = cleaned[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            if end >= len(cleaned):
+                break
+            start = max(start + 1, end - overlap)
+        return chunks
 
     def extract_entities_and_relations(self, text: str, diary_date=None, raise_on_error: bool = False) -> Dict[str, Any]:
         """
-        开源通用级日记语义理解：
-        1. 结合写作日期进行【回忆回溯时间绝对化】（如把过去的年份折算为绝对年份，严禁日记自身的记录年份，严禁“小时候/以前”等模糊词）；
-        2. 严格排除代词（你/我/她/他/别人）与“一切/所有/东西”等抽象虚词；
-        3. 联动知识库实现用户专属词典保底扫描与实体别名对齐。
+        面向 qwen3:8b 等中大规模模型的日记语义理解与结构化提取：
+        1. System/User 分离 + Few-shot 示例，提升 JSON 稳定性与实体粒度；
+        2. 注入知识库已有实体/别名上下文，保持称谓一致并建立跨日记图谱关联；
+        3. 自动提炼 10-20 字一句话摘要（summary）与心境情绪（mood）；
+        4. 支持结合写作日期将相对回忆时间折算为绝对年份（如“三年前”→“2023年”）。
         """
         date_str = diary_date.strftime("%Y年%m月%d日") if diary_date else "未知时间"
         diary_year = str(diary_date.year) if diary_date else ""
 
-        prompt = f"""你是一个私密日记语义理解助手。
-日记写于：{date_str}
+        kb_data = knowledge_base.get_all()
+        owner_name = knowledge_base.get_owner_name()
+        known_names = list(kb_data.get("custom_entities", {}).keys())[:60]
+        known_aliases = [f"{a}->{c}" for a, c in list(kb_data.get("aliases", {}).items())[:30]]
+        kb_hint_lines = [f"日记中的第一人称“我”指代「{owner_name}」"]
+        if known_names:
+            kb_hint_lines.append(f"已知实体参考（若文中提及请优先沿用相同名称）：{', '.join(known_names)}")
+        if known_aliases:
+            kb_hint_lines.append(f"已知别名映射：{', '.join(known_aliases)}")
+        kb_hint = "\n".join(kb_hint_lines)
 
-请仔细阅读日记正文，提取作者心境情绪（2-4字，如：怀念、困惑、释怀、烦躁，若无法判断请留空""），以及正文中实际提及的具象人物称谓/昵称、宠物、地点场景或核心事物意象。
+        system_prompt = f"""你是私密日记语义理解与记忆图谱构建助手。请从日记中提取结构化记忆，严格输出合法 JSON（不要 Markdown 代码块或额外解释）。
 
-【严格负面约束与时间规范】：
-1. 严禁代词与虚词：绝对严禁提取“你”、“我”、“他”、“她”、“别人”、“某人”、“大家”、“自己”、“一切”、“所有”、“东西”、“事情”等代词或抽象词！
-2. 严禁提取日记自身写作日期：绝不要把日记写于的这一天（{date_str}）当做实体提取！
-3. 严禁回显占位提示词：严禁输出“具体情绪词”、“心境词”、“情绪”、“心情”等占位符；若有多种情绪仅选一个最核心的2字词（如“烦躁”或“痛苦”，严禁拼接为“烦痛苦”）。
-4. 仅当作者在回忆过去的特定年份时，才提取该过去的绝对年份（如“2019年”）。严禁提取“小时候”、“四五年前”、“去年”、“最近”、“以前”等模糊词；若文中无确切过去年份，严禁提取任何时间标签！
-
-日记正文：
-\"\"\"{text[:2500]}\"\"\"
-
-请严格输出纯 JSON（无需多余解释）：
+输出 Schema：
 {{
-  "mood": "情绪词或空字符串",
+  "summary": "10-20字的一句话核心提炼，概括日记主要事件或感悟",
+  "mood": "2-4字心境情绪词（如：怀念、释怀、烦躁、平静、欣慰），无明显情绪则留空字符串 \"\"",
   "entities": [
-    {{"name": "实体名", "entity_type": "person/pet/place/time/concept"}}
+    {{"name": "实体名", "entity_type": "person|pet|place|time|concept"}}
   ],
   "relations": [
-    {{"source": "主体", "relation": "关系词", "target": "客体"}}
+    {{"source": "主体实体名", "relation": "关系词", "target": "客体实体名"}}
+  ]
+}}
+
+提取准则：
+1. entities 仅提取文中真实出现或明确指代的具象要素：
+   - person：具体人物姓名、称谓或昵称（如：阿哲、妈妈、李医生）
+   - pet：宠物名或动物（如：团子、橘猫）
+   - place：具体地点、城市、店铺或场景（如：西湖、老家、公司楼下咖啡馆）
+   - concept：核心事件、物品、项目或意象（如：毕业旅行、吉他、考研、桂花树）
+   - time：仅当回忆过去的特定年份时提取绝对年份（如“2019年”）。若文中出现“五年前”“前年”等可结合写作年份明确折算的表述，请折算为具体年份（如写于2026年且提“三年前”，则提取“2023年”）。严禁提取日记自身写作年份，严禁提取“小时候”“以前”“最近”等无法确定年份的模糊词。
+   - 严禁将第一人称或泛指代词、虚词放入 entities（如：我、你、他、她、作者、用户、自己、大家、别人、一切、所有、东西、事情、今天、现在）。
+2. relations 仅提取文中明确体现的实体间关系，优先使用规范关系词（朋友、家人、同事、恋人、位于、养了、喜欢、参与、发生于）：
+   - 若关系涉及日记中的第一人称“我”，source 或 target 请统一填写「{owner_name}」（严禁输出“作者”或“用户”）。
+   - 其他实体尽量对应 entities 或已知实体。
+
+示例：
+输入（写于 2026年05月10日）：
+"今晚和阿哲在杭州西湖边散步，聊起2021年一起在成都租房的日子，我养的橘猫豆包现在胖了不少。想到下周又要加班，心里有点烦躁。"
+输出：
+{{
+  "summary": "与阿哲在西湖散步怀念2021年成都合租时光",
+  "mood": "烦躁",
+  "entities": [
+    {{"name": "阿哲", "entity_type": "person"}},
+    {{"name": "杭州", "entity_type": "place"}},
+    {{"name": "西湖", "entity_type": "place"}},
+    {{"name": "成都", "entity_type": "place"}},
+    {{"name": "2021年", "entity_type": "time"}},
+    {{"name": "豆包", "entity_type": "pet"}}
+  ],
+  "relations": [
+    {{"source": "{owner_name}", "relation": "养了", "target": "豆包"}},
+    {{"source": "{owner_name}", "relation": "朋友", "target": "阿哲"}},
+    {{"source": "西湖", "relation": "位于", "target": "杭州"}}
   ]
 }}"""
+
+        user_prompt = f"日记写作日期：{date_str}\n"
+        if kb_hint:
+            user_prompt += f"{kb_hint}\n"
+        user_prompt += f"\n日记正文：\n\"\"\"{text[:4000]}\"\"\""
+
         clean_entities_map: Dict[str, Dict[str, Any]] = {}
         clean_relations: List[Dict[str, str]] = []
         mood_str = ""
+        summary_str = ""
 
         try:
             base_url = self._resolve_base_url(settings.LLM_BASE_URL)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
             if self._is_ollama(base_url, settings.LLM_API_KEY):
                 ollama_root = self._ollama_root(base_url)
                 ollama_payload: Dict[str, Any] = {
                     "model": settings.LLM_MODEL,
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
+                    "messages": messages,
                     "stream": False,
                     "think": False,
-                    "keep_alive": 0,
+                    "keep_alive": settings.OLLAMA_KEEP_ALIVE,
                     "format": "json",
                     "options": {
                         "temperature": 0.2,
-                        "num_ctx": 4096
+                        "num_ctx": 8192
                     }
                 }
                 try:
@@ -149,7 +221,7 @@ class LLMClient:
                         f"{ollama_root}/api/chat",
                         "",
                         ollama_payload,
-                        timeout=90.0
+                        timeout=120.0
                     )
                 except urllib.error.HTTPError as http_err:
                     if http_err.code == 400 and "think" in ollama_payload:
@@ -158,7 +230,7 @@ class LLMClient:
                             f"{ollama_root}/api/chat",
                             "",
                             ollama_payload,
-                            timeout=90.0
+                            timeout=120.0
                         )
                     else:
                         raise
@@ -166,9 +238,7 @@ class LLMClient:
             else:
                 payload: Dict[str, Any] = {
                     "model": settings.LLM_MODEL,
-                    "messages": [
-                        {"role": "user", "content": prompt}
-                    ],
+                    "messages": messages,
                     "temperature": 0.2,
                     "stream": False,
                     "response_format": {"type": "json_object"}
@@ -178,7 +248,7 @@ class LLMClient:
                         f"{base_url}/chat/completions",
                         settings.LLM_API_KEY,
                         payload,
-                        timeout=90.0
+                        timeout=120.0
                     )
                 except urllib.error.HTTPError as http_err:
                     if http_err.code == 400:
@@ -187,7 +257,7 @@ class LLMClient:
                             f"{base_url}/chat/completions",
                             settings.LLM_API_KEY,
                             payload,
-                            timeout=90.0
+                            timeout=120.0
                         )
                     else:
                         raise
@@ -201,25 +271,26 @@ class LLMClient:
                 raw = re.sub(r'\s*```$', '', raw).strip()
 
             parsed = json.loads(raw)
+            raw_summary = str(parsed.get("summary") or "").strip()
+            if raw_summary and len(raw_summary) >= 2:
+                summary_str = raw_summary[:45]
+
             raw_mood = str(parsed.get("mood") or "").strip()
-            # 严格过滤模板占位符回显与生硬拼接词
             bad_mood_set = {
                 "具体情绪词", "心境词", "情绪词", "心境", "情绪", "心情", "情绪词汇",
                 "情绪词或空字符串", "null", "none", "未知", "无", "具体", "情感", "状态", "无情绪"
             }
             if raw_mood in bad_mood_set or any(b in raw_mood for b in ["心境词", "具体情绪词", "情绪词", "占位"]):
                 mood_str = ""
-            elif raw_mood == "烦痛苦":
-                mood_str = "烦躁"
             elif len(raw_mood) > 6:
                 mood_str = raw_mood[:4]
             else:
                 mood_str = raw_mood
 
-            # 严格代词、抽象代名词与虚词黑名单（彻底阻止“你/她/一切”等被错提）
             stop_words = {
                 "你", "我", "他", "她", "它", "你们", "我们", "他们", "她们", "它们",
                 "您", "谁", "大家", "别人", "某人", "对方", "自己", "所有人", "每个人",
+                "作者", "用户", "本人", "日记主人",
                 "有人", "无人", "那个", "这个", "这些", "那些", "某位", "一位", "一个",
                 "一人", "俩人", "两人", "三人", "很多东西", "什么", "怎么", "之所以",
                 "因为", "所以", "如果", "但是", "其实", "虽然", "只是", "感觉", "觉得",
@@ -229,27 +300,25 @@ class LLMClient:
                 "去年", "前年", "以前", "当年", "最近", "多年", "几年前"
             }
 
+            self_aliases = {"我", "作者", "用户", "本人", "自己", "日记主人"}
+            rel_stop_words = stop_words - self_aliases
+
             for e in parsed.get("entities", []):
                 raw_name = str(e.get("name") or "").strip()
                 etype = str(e.get("entity_type") or "concept").strip()
+                if etype not in {"person", "pet", "place", "time", "concept"}:
+                    etype = "concept"
                 if not raw_name or len(raw_name) > 15 or raw_name.lower() in stop_words:
                     continue
 
-                # 时间类型严格校验
                 if etype == "time":
                     year_match = re.search(r'(19\d\d|20\d\d)', raw_name)
                     if not year_match:
-                        # 舍弃所有模糊时间词（如“小时候”、“前些年”）
                         continue
                     extracted_year = year_match.group(1)
-                    # 严禁将日记自身写作年份作为回忆时间提取
                     if diary_year and extracted_year == diary_year:
                         continue
                     raw_name = f"{extracted_year}年"
-
-                # 非时间类型必须在正文中实际存在
-                if etype != "time" and (raw_name not in text and raw_name.lower() not in text.lower()):
-                    continue
 
                 canonical = knowledge_base.resolve_entity(raw_name)
                 alias_target = knowledge_base.get_alias_mapping_for_name(raw_name)
@@ -260,7 +329,6 @@ class LLMClient:
                         "target": canonical
                     })
 
-                # 用户在知识库已设定的类型为最高优先准则
                 user_saved_type = knowledge_base.custom_entities.get(canonical)
                 final_type = user_saved_type if user_saved_type else etype
 
@@ -274,18 +342,26 @@ class LLMClient:
                 s = str(r.get("source") or "").strip()
                 rel = str(r.get("relation") or "").strip()
                 t = str(r.get("target") or "").strip()
-                if s and rel and t and s not in stop_words and t not in stop_words:
-                    clean_relations.append({
-                        "source": knowledge_base.resolve_entity(s),
-                        "relation": rel,
-                        "target": knowledge_base.resolve_entity(t)
-                    })
+                if (
+                    s and rel and t
+                    and s.lower() not in rel_stop_words
+                    and t.lower() not in rel_stop_words
+                    and len(s) <= 15 and len(t) <= 15 and len(rel) <= 12
+                ):
+                    rs = owner_name if s in self_aliases else knowledge_base.resolve_entity(s)
+                    rt = owner_name if t in self_aliases else knowledge_base.resolve_entity(t)
+                    if rs != rt:
+                        clean_relations.append({
+                            "source": rs,
+                            "relation": rel,
+                            "target": rt
+                        })
         except Exception as e:
             print(f"[LLM extraction error]: {e}")
             if raise_on_error:
                 raise
 
-        # 结合知识库词典做 100% 保底扫描（确保单字人名、朋友昵称绝不漏采）
+        # 结合知识库词典做保底扫描
         scanned_custom = knowledge_base.scan_custom_entities(text)
         for c in scanned_custom:
             c_name = c["name"]
@@ -299,11 +375,15 @@ class LLMClient:
                 })
 
         final_entities = list(clean_entities_map.values())
-        # 自动学习沉淀：将 AI 提取的有效标签持久化到知识库中
         knowledge_base.auto_register_entities(final_entities)
 
+        if not summary_str:
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            first_line = lines[0] if lines else text[:30]
+            summary_str = first_line[:40]
+
         return {
-            "summary": text[:40],
+            "summary": summary_str,
             "mood": mood_str,
             "entities": final_entities,
             "relations": clean_relations

@@ -18,6 +18,7 @@ class KnowledgeBase:
         self._last_mtime: float = -1.0
         self.aliases: Dict[str, str] = {}
         self.custom_entities: Dict[str, str] = {}
+        self.owner_name: str = "我"
         self._load(force=True)
 
     def _load(self, force: bool = False):
@@ -26,6 +27,7 @@ class KnowledgeBase:
                 if force or self._last_mtime != -1.0:
                     self.aliases = {}
                     self.custom_entities = {}
+                    self.owner_name = "我"
                     self._last_mtime = -1.0
                 return
             try:
@@ -36,6 +38,7 @@ class KnowledgeBase:
                     data = json.load(f)
                     self.aliases = data.get("aliases", {})
                     self.custom_entities = data.get("custom_entities", {})
+                    self.owner_name = (data.get("owner_name") or "我").strip() or "我"
                 self._last_mtime = mtime
             except Exception as e:
                 print(f"[KnowledgeBase load error]: {e}")
@@ -47,12 +50,27 @@ class KnowledgeBase:
                 os.makedirs(os.path.dirname(self.knowledge_path), exist_ok=True)
                 with open(self.knowledge_path, "w", encoding="utf-8") as f:
                     json.dump({
+                        "owner_name": self.owner_name,
                         "aliases": self.aliases,
                         "custom_entities": self.custom_entities
                     }, f, ensure_ascii=False, indent=2)
                 self._last_mtime = os.path.getmtime(self.knowledge_path)
             except Exception as e:
                 print(f"[KnowledgeBase save error]: {e}")
+
+    def get_owner_name(self) -> str:
+        with self._lock:
+            self._load()
+            return self.owner_name or "我"
+
+    def set_owner_name(self, name: str) -> str:
+        with self._lock:
+            self._load()
+            cleaned = (name or "").strip() or "我"
+            old = self.owner_name or "我"
+            self.owner_name = cleaned
+            self.save()
+            return old
 
     def resolve_entity(self, name: str) -> str:
         """

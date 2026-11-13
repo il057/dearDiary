@@ -5,24 +5,44 @@
     <!-- 2D 记忆星系 Canvas 画板 -->
     <canvas ref="canvasRef" class="w-full h-full block touch-none cursor-grab active:cursor-grabbing"></canvas>
 
-    <!-- 左上角极简星图 HUD 与高频实体快捷滤镜 -->
-    <div v-if="!loading && nodeCount > 0" class="absolute top-3 left-3 right-16 z-20 flex flex-col gap-2 pointer-events-none">
-      <div class="inline-flex items-center space-x-2 text-[11px] font-mono text-zinc-400 bg-[#08080a]/85 backdrop-blur-md border border-[#1c1c24] px-2.5 py-1 rounded-xs w-fit pointer-events-auto">
-        <span class="text-[#dc143c] text-xs leading-none">✦</span>
-        <span>日记: <strong class="text-zinc-200">{{ nodeCount }}</strong></span>
-        <span class="text-zinc-600">·</span>
-        <span>关联: <strong class="text-zinc-200">{{ linkCount }}</strong></span>
-        <button
-          v-if="highlightTag || selectedNode"
-          @click="clearSelection"
-          class="ml-2 text-[#f43f5e] hover:underline cursor-pointer"
-        >
-          [清除高亮]
-        </button>
+    <!-- 左上角极简星图 HUD 与模式切换 -->
+    <div v-if="!loading" class="absolute top-3 left-3 right-16 z-20 flex flex-col gap-2 pointer-events-none">
+      <div class="flex flex-wrap items-center gap-2 pointer-events-auto">
+        <!-- 视图切换胶囊 -->
+        <div class="inline-flex items-center bg-[#08080a]/90 backdrop-blur-md border border-[#1c1c24] rounded-xs p-0.5 text-[11px] font-mono">
+          <button
+            @click="switchGraphMode('diary')"
+            class="px-2 py-0.5 rounded-xs transition-colors cursor-pointer"
+            :class="graphMode === 'diary' ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/50' : 'text-zinc-400 hover:text-zinc-200'"
+          >
+            日记星系
+          </button>
+          <button
+            @click="switchGraphMode('entity')"
+            class="px-2 py-0.5 rounded-xs transition-colors cursor-pointer"
+            :class="graphMode === 'entity' ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/50' : 'text-zinc-400 hover:text-zinc-200'"
+          >
+            实体关系
+          </button>
+        </div>
+
+        <div v-if="nodeCount > 0" class="inline-flex items-center space-x-2 text-[11px] font-mono text-zinc-400 bg-[#08080a]/85 backdrop-blur-md border border-[#1c1c24] px-2.5 py-1 rounded-xs w-fit">
+          <span class="text-[#dc143c] text-xs leading-none">✦</span>
+          <span>{{ graphMode === 'diary' ? '日记' : '实体' }}: <strong class="text-zinc-200">{{ nodeCount }}</strong></span>
+          <span class="text-zinc-600">·</span>
+          <span>{{ graphMode === 'diary' ? '关联' : '关系' }}: <strong class="text-zinc-200">{{ linkCount }}</strong></span>
+          <button
+            v-if="highlightTag || selectedNode"
+            @click="clearSelection"
+            class="ml-2 text-[#f43f5e] hover:underline cursor-pointer"
+          >
+            [清除高亮]
+          </button>
+        </div>
       </div>
 
-      <!-- 高频实体快捷点亮胶囊 -->
-      <div v-if="topEntities.length > 0" class="flex flex-wrap items-center gap-1.5 pointer-events-auto">
+      <!-- 高频实体快捷点亮胶囊（日记星系模式） -->
+      <div v-if="graphMode === 'diary' && topEntities.length > 0" class="flex flex-wrap items-center gap-1.5 pointer-events-auto">
         <button
           v-for="ent in topEntities"
           :key="ent"
@@ -47,63 +67,106 @@
       <Crosshair class="w-4 h-4" />
     </button>
 
-    <!-- 选中星辰节点后的底部精炼卡片 -->
+    <!-- 选中节点后的底部精炼卡片 -->
     <Transition name="drawer">
       <div
         v-if="selectedNode"
         class="absolute bottom-4 left-4 right-4 max-w-2xl mx-auto bg-[#08080b]/95 backdrop-blur-xl border border-[#24242e] p-4 rounded-xs shadow-2xl z-30 pointer-events-auto"
       >
-        <div class="flex items-center justify-between pb-2 border-b border-[#16161c] text-xs text-zinc-400">
-          <div class="flex items-center space-x-2 flex-wrap gap-y-1">
-            <span
-              class="text-xs leading-none"
-              :style="{
-                color: selectedNode.color || '#dc143c'
-              }"
-            >✦</span>
-            <span class="font-mono text-zinc-300">{{ selectedNode.created_at }}</span>
-            <span v-if="selectedNode.mood" class="px-1.5 py-0.5 bg-[#180a0e] border border-[#dc143c]/30 text-[#f43f5e] rounded-xs text-[10px]">
-              {{ selectedNode.mood }}
-            </span>
-            <span v-if="highlightTag" class="text-[10px] px-1.5 py-0.5 bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/40 rounded-xs font-mono">
-              #{{ highlightTag }} · {{ highlightNeighborIds.size }} 篇
-            </span>
-            <span v-else-if="highlightNeighborIds.size > 0" class="text-[10px] text-zinc-500 font-mono">
-              · {{ highlightNeighborIds.size }} 篇关联
-            </span>
+        <template v-if="graphMode === 'diary'">
+          <div class="flex items-center justify-between pb-2 border-b border-[#16161c] text-xs text-zinc-400">
+            <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+              <span
+                class="text-xs leading-none"
+                :style="{
+                  color: selectedNode.color || '#dc143c'
+                }"
+              >✦</span>
+              <span class="font-mono text-zinc-300">{{ selectedNode.created_at }}</span>
+              <span v-if="selectedNode.mood" class="px-1.5 py-0.5 bg-[#180a0e] border border-[#dc143c]/30 text-[#f43f5e] rounded-xs text-[10px]">
+                {{ selectedNode.mood }}
+              </span>
+              <span v-if="highlightTag" class="text-[10px] px-1.5 py-0.5 bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/40 rounded-xs font-mono">
+                #{{ highlightTag }} · {{ highlightNeighborIds.size }} 篇
+              </span>
+              <span v-else-if="highlightNeighborIds.size > 0" class="text-[10px] text-zinc-500 font-mono">
+                · {{ highlightNeighborIds.size }} 篇关联
+              </span>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <button
+                @click="$emit('open-diary', selectedNode.id)"
+                class="text-[11px] font-mono text-[#f43f5e] hover:text-white px-2 py-0.5 bg-[#180a0e] border border-[#dc143c]/40 rounded-xs cursor-pointer transition-colors"
+              >
+                阅读全文 →
+              </button>
+              <button @click="clearSelection" class="p-1 text-zinc-500 hover:text-zinc-200 cursor-pointer">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          <div class="flex items-center space-x-2">
+          <p class="mt-2.5 text-zinc-200 text-xs sm:text-sm leading-relaxed line-clamp-3 select-text font-normal">
+            {{ selectedNode.content }}
+          </p>
+
+          <!-- 实体标签栏：点击任意 Tag 高亮所有关联日记 -->
+          <div v-if="selectedNode.entities && selectedNode.entities.length" class="mt-2.5 pt-2 border-t border-[#16161c] flex flex-wrap gap-1.5 items-center">
             <button
-              @click="$emit('open-diary', selectedNode.id)"
-              class="text-[11px] font-mono text-[#f43f5e] hover:text-white px-2 py-0.5 bg-[#180a0e] border border-[#dc143c]/40 rounded-xs cursor-pointer transition-colors"
+              v-for="ent in selectedNode.entities"
+              :key="ent"
+              @click.stop="highlightByEntity(ent)"
+              class="px-2 py-0.5 rounded-xs text-[10px] font-mono transition-all cursor-pointer"
+              :class="highlightTag === ent
+                ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/60'
+                : 'bg-[#0c0c10] hover:bg-[#16161c] text-zinc-400 hover:text-zinc-200 border border-[#1e1e26]'"
             >
-              阅读全文 →
-            </button>
-            <button @click="clearSelection" class="p-1 text-zinc-500 hover:text-zinc-200 cursor-pointer">
-              <X class="w-4 h-4" />
+              #{{ ent }}
             </button>
           </div>
-        </div>
+        </template>
 
-        <p class="mt-2.5 text-zinc-200 text-xs sm:text-sm leading-relaxed line-clamp-3 select-text font-normal">
-          {{ selectedNode.content }}
-        </p>
+        <template v-else>
+          <div class="flex items-center justify-between pb-2 border-b border-[#16161c] text-xs text-zinc-400">
+            <div class="flex items-center space-x-2 flex-wrap gap-y-1">
+              <span class="text-xs leading-none" :style="{ color: selectedNode.color || '#dc143c' }">✦</span>
+              <span class="text-sm font-semibold text-zinc-100">{{ selectedNode.name }}</span>
+              <span class="px-1.5 py-0.5 bg-[#12080a] border border-[#dc143c]/30 text-[#f43f5e] rounded-xs text-[10px] font-mono">
+                {{ getTypeLabel(selectedNode.entity_type, selectedNode.is_owner) }}
+              </span>
+              <span v-if="selectedNode.count > 0" class="text-[10px] text-zinc-500 font-mono">
+                提及 {{ selectedNode.count }} 篇
+              </span>
+            </div>
 
-        <!-- 实体标签栏：点击任意 Tag 高亮所有关联日记 -->
-        <div v-if="selectedNode.entities && selectedNode.entities.length" class="mt-2.5 pt-2 border-t border-[#16161c] flex flex-wrap gap-1.5 items-center">
-          <button
-            v-for="ent in selectedNode.entities"
-            :key="ent"
-            @click.stop="highlightByEntity(ent)"
-            class="px-2 py-0.5 rounded-xs text-[10px] font-mono transition-all cursor-pointer"
-            :class="highlightTag === ent
-              ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/60'
-              : 'bg-[#0c0c10] hover:bg-[#16161c] text-zinc-400 hover:text-zinc-200 border border-[#1e1e26]'"
-          >
-            #{{ ent }}
-          </button>
-        </div>
+            <div class="flex items-center space-x-2">
+              <button
+                v-if="!selectedNode.is_owner || selectedNode.count > 0"
+                @click="$emit('search-entity', selectedNode.name)"
+                class="text-[11px] font-mono text-[#f43f5e] hover:text-white px-2 py-0.5 bg-[#180a0e] border border-[#dc143c]/40 rounded-xs cursor-pointer transition-colors"
+              >
+                搜索相关日记 →
+              </button>
+              <button @click="clearSelection" class="p-1 text-zinc-500 hover:text-zinc-200 cursor-pointer">
+                <X class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div v-if="selectedEntityRelations.length > 0" class="mt-2.5 flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+            <span
+              v-for="(rel, idx) in selectedEntityRelations"
+              :key="idx"
+              class="inline-flex items-center space-x-1 text-[11px] px-2 py-0.5 bg-[#0c0c10] border border-[#1e1e26] rounded-xs text-zinc-300"
+            >
+              <span class="font-medium">{{ rel.sourceName }}</span>
+              <span class="text-[#f43f5e] font-mono text-[10px]">—[{{ rel.relation }}]→</span>
+              <span class="font-medium">{{ rel.targetName }}</span>
+            </span>
+          </div>
+          <p v-else class="mt-2.5 text-xs text-zinc-500">暂无与其他实体的直接关系记录</p>
+        </template>
       </div>
     </Transition>
 
@@ -120,7 +183,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import {
   forceSimulation,
   forceLink,
@@ -133,9 +196,10 @@ import { select } from 'd3-selection'
 import { X, Crosshair } from '@lucide/vue'
 import { diaryApi } from '../api/diary'
 
-const emit = defineEmits(['open-diary'])
+const emit = defineEmits(['open-diary', 'search-entity'])
 
 const canvasRef = ref(null)
+const graphMode = ref('diary')
 const loading = ref(false)
 const selectedNode = ref(null)
 const highlightNeighborIds = ref(new Set())
@@ -151,6 +215,51 @@ let canvasSelection = null
 let nodesData = []
 let linksData = []
 let animFrameId = null
+let clickHandler = null
+
+const ENTITY_TYPE_COLORS = {
+  person: '#f43f5e',
+  pet: '#f59e0b',
+  place: '#38bdf8',
+  time: '#a78bfa',
+  concept: '#94a3b8'
+}
+
+const ENTITY_TYPE_LABELS = {
+  person: '人物',
+  pet: '宠物',
+  place: '地点',
+  time: '时间',
+  concept: '概念'
+}
+
+const getTypeLabel = (etype, isOwner) => {
+  if (isOwner) return '自己'
+  return ENTITY_TYPE_LABELS[etype] || '概念'
+}
+
+const selectedEntityRelations = computed(() => {
+  if (graphMode.value !== 'entity' || !selectedNode.value) return []
+  const nid = selectedNode.value.id
+  return linksData
+    .filter(l => {
+      const sid = l.source.id !== undefined ? l.source.id : l.source
+      const tid = l.target.id !== undefined ? l.target.id : l.target
+      return sid === nid || tid === nid
+    })
+    .map(l => ({
+      sourceName: l.source.name || l.source.id || l.source,
+      targetName: l.target.name || l.target.id || l.target,
+      relation: l.relation
+    }))
+})
+
+const switchGraphMode = (mode) => {
+  if (graphMode.value === mode) return
+  graphMode.value = mode
+  clearSelection()
+  initGraph()
+}
 
 const clearSelection = () => {
   selectedNode.value = null
@@ -197,25 +306,47 @@ const highlightByEntity = (ent) => {
 }
 
 const initGraph = async () => {
+  if (animFrameId) {
+    cancelAnimationFrame(animFrameId)
+    animFrameId = null
+  }
+  if (simulation) {
+    simulation.stop()
+    simulation = null
+  }
+  currentTransform = zoomIdentity
+
   loading.value = true
   try {
-    const res = await diaryApi.getClusterGraph2D()
-    nodesData = res.data.nodes || []
-    linksData = res.data.links || []
+    if (graphMode.value === 'entity') {
+      const res = await diaryApi.getEntityGraph()
+      nodesData = (res.data.nodes || []).map(n => ({
+        ...n,
+        color: n.is_owner ? '#dc143c' : (ENTITY_TYPE_COLORS[n.entity_type] || '#94a3b8'),
+        val: Math.min(16, Math.max(5, 5 + (n.count || 0) * 1.4 + (n.is_owner ? 4 : 0)))
+      }))
+      linksData = res.data.links || []
+      topEntities.value = []
+    } else {
+      const res = await diaryApi.getClusterGraph2D()
+      nodesData = res.data.nodes || []
+      linksData = res.data.links || []
+
+      // 统计高频实体 TOP 8 用于快捷滤镜
+      const entCounts = {}
+      nodesData.forEach(n => {
+        (n.entities || []).forEach(e => {
+          entCounts[e] = (entCounts[e] || 0) + 1
+        })
+      })
+      topEntities.value = Object.entries(entCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([name]) => name)
+    }
+
     nodeCount.value = nodesData.length
     linkCount.value = linksData.length
-
-    // 统计高频实体 TOP 8 用于快捷滤镜
-    const entCounts = {}
-    nodesData.forEach(n => {
-      (n.entities || []).forEach(e => {
-        entCounts[e] = (entCounts[e] || 0) + 1
-      })
-    })
-    topEntities.value = Object.entries(entCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([name]) => name)
 
     const canvas = canvasRef.value
     if (!canvas) return
@@ -292,11 +423,45 @@ const initGraph = async () => {
           ctx.lineWidth = (0.55 + strength * 0.65) * invSqrtK
         }
         ctx.stroke()
+
+        // 实体关系模式下绘制箭头与关系标签
+        if (graphMode.value === 'entity' && link.relation) {
+          const dx = link.target.x - link.source.x
+          const dy = link.target.y - link.source.y
+          const dist = Math.hypot(dx, dy)
+          if (dist > 12) {
+            const ux = dx / dist
+            const uy = dy / dist
+            const targetR = getBaseRadius(link.target) * Math.pow(k, -0.18) + 3 * invSqrtK
+            const ax = link.target.x - ux * targetR
+            const ay = link.target.y - uy * targetR
+            const arrowLen = 5.5 * invSqrtK
+            const angle = Math.atan2(dy, dx)
+
+            ctx.beginPath()
+            ctx.moveTo(ax, ay)
+            ctx.lineTo(ax - arrowLen * Math.cos(angle - Math.PI / 6), ay - arrowLen * Math.sin(angle - Math.PI / 6))
+            ctx.lineTo(ax - arrowLen * Math.cos(angle + Math.PI / 6), ay - arrowLen * Math.sin(angle + Math.PI / 6))
+            ctx.closePath()
+            ctx.fillStyle = (hasHighlight && isRelated) ? 'rgba(244, 63, 94, 0.9)' : 'rgba(255, 255, 255, 0.25)'
+            ctx.fill()
+
+            if ((hasHighlight && isRelated) || (!hasHighlight && k >= 1.15)) {
+              const mx = (link.source.x + link.target.x) / 2
+              const my = (link.source.y + link.target.y) / 2
+              const relFont = Math.max(7.5, 9 * invSqrtK)
+              ctx.font = `${relFont}px UnifontJP, monospace`
+              ctx.textAlign = 'center'
+              ctx.fillStyle = (hasHighlight && isRelated) ? '#fda4af' : 'rgba(161, 161, 170, 0.65)'
+              ctx.fillText(link.relation, mx, my - 3 * invSqrtK)
+            }
+          }
+        }
       }
 
       // 2. 绘制极简星辰节点（保留清晰的枢纽/普通节点大小层级）
       const labelBoxes = []
-      const showZoomLabels = k >= (isMobile ? 1.65 : 1.45)
+      const showZoomLabels = graphMode.value === 'entity' ? k >= 0.75 : k >= (isMobile ? 1.65 : 1.45)
 
       for (const node of nodesData) {
         if (node.x === undefined) continue
@@ -335,16 +500,16 @@ const initGraph = async () => {
           ctx.stroke()
         }
 
-        // 日期标注：仅在选中、高亮关联或充分放大时显示，并做防重叠碰撞检测
+        // 标签标注：日记模式显示日期，实体模式显示实体名，并做防重叠碰撞检测
         const shouldTryLabel = isSelected || isNeighbor || (!hasHighlight && showZoomLabels)
         if (shouldTryLabel) {
-          const shortDate = (node.created_at || '').slice(0, 10)
+          const labelText = graphMode.value === 'entity' ? (node.name || '') : (node.created_at || '').slice(0, 10)
           const fontSize = Math.max(8.5, 10.5 * invSqrtK)
           ctx.font = `${fontSize}px UnifontJP, monospace`
           ctx.textAlign = 'center'
 
           const labelY = node.y + baseRadius + 10 * invSqrtK
-          const textW = ctx.measureText(shortDate).width + 6 * invSqrtK
+          const textW = ctx.measureText(labelText).width + 6 * invSqrtK
           const textH = fontSize + 3 * invSqrtK
           const box = {
             x1: node.x - textW / 2,
@@ -359,8 +524,8 @@ const initGraph = async () => {
 
           if (!overlaps) {
             labelBoxes.push(box)
-            ctx.fillStyle = isSelected ? '#ffffff' : (isNeighbor ? '#fda4af' : 'rgba(161, 161, 170, 0.72)')
-            ctx.fillText(shortDate, node.x, labelY)
+            ctx.fillStyle = isSelected ? '#ffffff' : (isNeighbor ? '#fda4af' : 'rgba(212, 212, 216, 0.82)')
+            ctx.fillText(labelText, node.x, labelY)
           }
         }
 
@@ -381,8 +546,12 @@ const initGraph = async () => {
 
     canvasSelection = select(canvas)
     canvasSelection.call(zoomBehaviorInstance)
+    canvasSelection.call(zoomBehaviorInstance.transform, zoomIdentity)
 
-    canvas.addEventListener('click', (e) => {
+    if (clickHandler) {
+      canvas.removeEventListener('click', clickHandler)
+    }
+    clickHandler = (e) => {
       const rect = canvas.getBoundingClientRect()
       const clickX = (e.clientX - rect.left - currentTransform.x) / currentTransform.k
       const clickY = (e.clientY - rect.top - currentTransform.y) / currentTransform.k
@@ -405,7 +574,8 @@ const initGraph = async () => {
       } else {
         clearSelection()
       }
-    })
+    }
+    canvas.addEventListener('click', clickHandler)
   } catch (err) {
     console.error('加载 2D 聚类星图失败', err)
   } finally {

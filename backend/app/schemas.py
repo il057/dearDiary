@@ -1,5 +1,5 @@
 import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 class DiaryCreate(BaseModel):
@@ -34,6 +34,7 @@ class EntityOut(BaseModel):
         from_attributes = True
 
 class RelationOut(BaseModel):
+    id: int
     source_name: str
     relation: str
     target_name: str
@@ -41,6 +42,31 @@ class RelationOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+class RelationCreateRequest(BaseModel):
+    source_name: str = Field(..., description="主体实体名")
+    relation: str = Field(..., description="关系词")
+    target_name: str = Field(..., description="客体实体名")
+
+class OwnerNameUpdateRequest(BaseModel):
+    owner_name: str = Field(..., description="日记主人的称呼（默认为“我”）")
+
+class EntityGraphNode(BaseModel):
+    id: str
+    name: str
+    entity_type: str = "concept"
+    count: int = 0
+    is_owner: bool = False
+
+class EntityGraphLink(BaseModel):
+    source: str
+    target: str
+    relation: str
+    weight: float = 1.0
+
+class EntityGraphResponse(BaseModel):
+    nodes: List[EntityGraphNode] = []
+    links: List[EntityGraphLink] = []
 
 class DiaryOut(BaseModel):
     id: int
@@ -98,3 +124,5 @@ class DiaryImportItem(BaseModel):
 
 class DiaryImportRequest(BaseModel):
     diaries: List[DiaryImportItem]
+    knowledge: Optional[Dict[str, Any]] = None
+    relations: Optional[List[RelationCreateRequest]] = None

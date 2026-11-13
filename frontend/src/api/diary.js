@@ -13,6 +13,10 @@ export const diaryApi = {
   getSingleDiary(id) {
     return api.get(`/diaries/${id}`)
   },
+
+  getRelatedDiaries(id, limit = 5) {
+    return api.get(`/diaries/${id}/related`, { params: { limit } })
+  },
   
   createDiary(content, created_at = null) {
     const payload = { content }
@@ -41,6 +45,11 @@ export const diaryApi = {
   // 获取 2D 力导向聚类星系图数据
   getClusterGraph2D() {
     return api.get('/graph/cluster2d')
+  },
+
+  // 获取实体与关系知识图谱数据
+  getEntityGraph() {
+    return api.get('/graph/entities')
   },
 
   // 手工增删改单篇日记的标签
@@ -78,6 +87,24 @@ export const diaryApi = {
     return api.put('/knowledge/entity', { name, entity_type })
   },
 
+  // 设置日记主人称呼（默认“我”）
+  updateOwnerName(owner_name) {
+    return api.put('/knowledge/owner', { owner_name })
+  },
+
+  // 实体关系 CRUD
+  createRelation(source_name, relation, target_name) {
+    return api.post('/knowledge/relations', { source_name, relation, target_name })
+  },
+
+  updateRelation(id, source_name, relation, target_name) {
+    return api.put(`/knowledge/relations/${id}`, { source_name, relation, target_name })
+  },
+
+  deleteRelation(id) {
+    return api.delete(`/knowledge/relations/${id}`)
+  },
+
   deleteDiary(id) {
     return api.delete(`/diaries/${id}`)
   },
@@ -86,7 +113,10 @@ export const diaryApi = {
     return api.get('/export')
   },
 
-  importDiaries(diaries) {
-    return api.post('/import', { diaries })
+  importDiaries(payload) {
+    if (Array.isArray(payload)) {
+      return api.post('/import', { diaries: payload })
+    }
+    return api.post('/import', payload)
   }
 }

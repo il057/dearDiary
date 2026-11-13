@@ -202,6 +202,44 @@
             </button>
           </div>
         </div>
+
+        <!-- 相关历史记忆推荐 -->
+        <div v-if="relatedLoading || relatedDiaries.length > 0" class="pt-6 border-t border-[#18181f] space-y-3 select-none">
+          <div class="flex items-center justify-between text-xs text-zinc-500">
+            <span class="font-mono uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+              <span class="text-[#dc143c]">✦</span>
+              <span>相关记忆</span>
+            </span>
+            <span v-if="relatedLoading" class="text-[10px] text-zinc-600 font-mono">检索中...</span>
+          </div>
+
+          <div v-if="relatedLoading" class="space-y-2">
+            <div v-for="i in 2" :key="i" class="h-14 bg-[#0a0a0d] border border-[#18181f] rounded-xs animate-pulse"></div>
+          </div>
+
+          <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div
+              v-for="item in relatedDiaries"
+              :key="item.diary_id"
+              @click="$emit('select-related', item.diary_id)"
+              class="p-3 bg-[#08080b] hover:bg-[#0e0b0d] border border-[#18181f] hover:border-[#dc143c]/40 rounded-xs transition-colors cursor-pointer space-y-1.5 group"
+            >
+              <div class="flex items-center justify-between text-[11px]">
+                <div class="flex items-center space-x-1.5 min-w-0">
+                  <span class="text-xs leading-none shrink-0" :style="{ color: item.mood_color || '#dc143c' }">✦</span>
+                  <span class="font-mono text-zinc-400 shrink-0">{{ formatCleanTime(item.created_at) }}</span>
+                  <span v-if="item.mood" class="px-1.5 py-0.2 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/30 rounded-xs text-[10px] shrink-0">
+                    {{ item.mood }}
+                  </span>
+                </div>
+                <span class="text-[10px] text-[#f43f5e]/80 truncate ml-2">{{ item.matched_reason }}</span>
+              </div>
+              <p class="text-xs text-zinc-300 group-hover:text-zinc-100 line-clamp-2 leading-relaxed">
+                {{ item.summary || item.content }}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -214,6 +252,7 @@ import {
   Clock, Sparkles, X, Plus
 } from '@lucide/vue'
 import { splitHighlightSegments, isEntityHighlighted } from '../utils/highlight'
+import { diaryApi } from '../api/diary'
 
 const props = defineProps({
   diary: {
@@ -231,7 +270,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits([
-  'close', 'update', 'delete', 'reindex', 'filter-tag', 'update-entities'
+  'close', 'update', 'delete', 'reindex', 'filter-tag', 'update-entities', 'select-related'
 ])
 
 const isEditing = ref(false)
@@ -239,6 +278,33 @@ const editDraftContent = ref('')
 const editDraftTime = ref('')
 const isAddingTag = ref(false)
 const newTagText = ref('')
+const relatedDiaries = ref([])
+const relatedLoading = ref(false)
+
+const fetchRelated = async (id) => {
+  if (!id) {
+    relatedDiaries.value = []
+    return
+  }
+  relatedLoading.value = true
+  try {
+    const res = await diaryApi.getRelatedDiaries(id, 4)
+    relatedDiaries.value = res.data || []
+  } catch {
+    relatedDiaries.value = []
+  } finally {
+    relatedLoading.value = false
+  }
+}
+
+watch(
+  () => props.diary?.id || props.diary?.diary_id,
+  (newId) => {
+    isEditing.value = false
+    fetchRelated(newId)
+  },
+  { immediate: true }
+)
 
 const toDatetimeLocal = (isoStr) => {
   if (!isoStr) return ''
