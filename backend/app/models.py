@@ -15,6 +15,19 @@ class Diary(Base):
 
     # 关联该日记中出现的实体
     entities = relationship("DiaryEntity", back_populates="diary", cascade="all, delete-orphan")
+    # 引用关系：本篇引用的日记 & 引用本篇的后续日记
+    quote_links = relationship(
+        "DiaryQuote",
+        foreign_keys="[DiaryQuote.diary_id]",
+        back_populates="diary",
+        cascade="all, delete-orphan"
+    )
+    quoted_by_links = relationship(
+        "DiaryQuote",
+        foreign_keys="[DiaryQuote.quoted_diary_id]",
+        back_populates="quoted_diary",
+        cascade="all, delete-orphan"
+    )
 
 
 class Entity(Base):
@@ -61,4 +74,19 @@ class DiaryEntity(Base):
 
     diary = relationship("Diary", back_populates="entities")
     entity = relationship("Entity", back_populates="diary_associations")
+
+
+class DiaryQuote(Base):
+    """
+    日记引用关联表：diary_id 引用了 quoted_diary_id
+    """
+    __tablename__ = "diary_quotes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    diary_id = Column(Integer, ForeignKey("diaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    quoted_diary_id = Column(Integer, ForeignKey("diaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    diary = relationship("Diary", foreign_keys=[diary_id], back_populates="quote_links")
+    quoted_diary = relationship("Diary", foreign_keys=[quoted_diary_id], back_populates="quoted_by_links")
 

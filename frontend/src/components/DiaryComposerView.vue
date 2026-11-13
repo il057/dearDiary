@@ -22,8 +22,23 @@
         </div>
       </div>
 
-      <!-- 补档与保存控制 -->
+      <!-- 补档、引用与保存控制 -->
       <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- 引用过往日记 -->
+        <button
+          type="button"
+          @click="isQuotePickerOpen = !isQuotePickerOpen"
+          class="inline-flex items-center space-x-1 px-2.5 py-1 text-xs rounded-xs border transition-colors cursor-pointer"
+          :class="isQuotePickerOpen || quotedDiaries.length > 0
+            ? 'bg-[#180a0e] text-[#f43f5e] border-[#dc143c]/60'
+            : 'text-zinc-400 hover:text-zinc-200 bg-neutral-900 border-neutral-800'"
+          title="引用过往日记"
+        >
+          <Quote class="w-3.5 h-3.5" />
+          <span class="hidden sm:inline">{{ quotedDiaries.length > 0 ? `已引用 (${quotedDiaries.length})` : '引用日记' }}</span>
+          <span class="sm:hidden">{{ quotedDiaries.length > 0 ? quotedDiaries.length : '引用' }}</span>
+        </button>
+
         <!-- 切换补档模式 -->
         <button
           type="button"
@@ -94,8 +109,85 @@
       </div>
     </div>
 
+    <!-- 引用日记选择器 (展开态) -->
+    <div
+      v-if="isQuotePickerOpen"
+      class="bg-[#0a0a0d] border-b border-[#18181f] px-4 sm:px-8 py-3 space-y-2.5 text-xs select-none"
+    >
+      <div class="flex items-center space-x-2">
+        <Search class="w-3.5 h-3.5 text-[#dc143c] shrink-0" />
+        <input
+          v-model="quoteSearchQuery"
+          type="text"
+          placeholder="搜索要引用的过往日记（正文、心情、标签或日期）..."
+          class="flex-1 bg-[#050505] border border-neutral-800 text-zinc-100 rounded-xs px-2.5 py-1.5 text-xs outline-none focus:border-[#dc143c]"
+        />
+        <button
+          type="button"
+          @click="isQuotePickerOpen = false"
+          class="px-2 py-1 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+        >
+          收起
+        </button>
+      </div>
+
+      <div v-if="filteredQuoteCandidates.length === 0" class="text-[11px] text-zinc-500 font-mono py-1">
+        暂无匹配的日记可引用
+      </div>
+      <div v-else class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+        <div
+          v-for="cand in filteredQuoteCandidates"
+          :key="cand.id"
+          @click="addQuotedDiary(cand)"
+          class="flex items-center justify-between gap-3 p-2 bg-[#060609] hover:bg-[#14090c] border border-[#1a1a22] hover:border-[#dc143c]/50 rounded-xs cursor-pointer transition-colors"
+        >
+          <div class="min-w-0 flex-1 space-y-0.5">
+            <div class="flex items-center space-x-2 text-[11px]">
+              <span class="text-xs leading-none" :style="{ color: cand.mood_color || '#dc143c' }">✦</span>
+              <span class="font-mono text-zinc-400">{{ formatQuoteTime(cand.created_at) }}</span>
+              <span v-if="cand.mood" class="px-1.5 py-0.2 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/30 rounded-xs text-[10px]">
+                {{ cand.mood }}
+              </span>
+            </div>
+            <p class="text-xs text-zinc-300 truncate">{{ cand.summary || cand.content }}</p>
+          </div>
+          <span class="text-[11px] text-[#f43f5e] font-mono shrink-0">+ 引用</span>
+        </div>
+      </div>
+    </div>
+
     <!-- 沉浸式长文书写主体 -->
-    <main class="flex-1 overflow-y-auto px-4 sm:px-12 md:px-20 py-8 flex flex-col">
+    <main class="flex-1 overflow-y-auto px-4 sm:px-12 md:px-20 py-8 flex flex-col space-y-5">
+      <!-- 已引用的日记卡片列表 -->
+      <div v-if="quotedDiaries.length > 0" class="space-y-2 shrink-0">
+        <div
+          v-for="q in quotedDiaries"
+          :key="q.id"
+          class="relative flex items-start justify-between gap-3 p-3 bg-[#09090d] border border-[#1c1c24] border-l-2 border-l-[#dc143c] rounded-xs"
+        >
+          <div class="min-w-0 flex-1 space-y-1">
+            <div class="flex items-center space-x-2 text-[11px] select-none">
+              <Quote class="w-3 h-3 text-[#dc143c] shrink-0" />
+              <span class="font-mono text-zinc-400">引用 · {{ formatQuoteTime(q.created_at) }}</span>
+              <span v-if="q.mood" class="px-1.5 py-0.2 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/30 rounded-xs text-[10px]">
+                {{ q.mood }}
+              </span>
+            </div>
+            <p class="text-xs text-zinc-300 line-clamp-2 leading-relaxed">
+              {{ q.content }}
+            </p>
+          </div>
+          <button
+            type="button"
+            @click="removeQuotedDiary(q.id)"
+            class="p-1 text-zinc-500 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+            title="取消引用"
+          >
+            <X class="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
       <textarea
         ref="textareaRef"
         v-model="content"
@@ -116,8 +208,8 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
-import { ArrowLeft, Check, CalendarClock, Calendar } from '@lucide/vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { ArrowLeft, Check, CalendarClock, Calendar, Quote, Search, X } from '@lucide/vue'
 
 const DRAFT_KEY = 'deardiary_composer_draft'
 
@@ -125,6 +217,14 @@ const props = defineProps({
   initialDate: {
     type: String,
     default: null
+  },
+  initialQuote: {
+    type: Object,
+    default: null
+  },
+  allDiaries: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -134,6 +234,9 @@ const content = ref('')
 const isSubmitting = ref(false)
 const isBackfillMode = ref(false)
 const backfillTime = ref('')
+const quotedDiaries = ref([])
+const isQuotePickerOpen = ref(false)
+const quoteSearchQuery = ref('')
 const textareaRef = ref(null)
 
 const clearDraft = () => {
@@ -168,6 +271,7 @@ onMounted(() => {
       if (draft && typeof draft === 'object') {
         if (typeof draft.content === 'string') content.value = draft.content
         if (typeof draft.isBackfillMode === 'boolean') isBackfillMode.value = draft.isBackfillMode
+        if (Array.isArray(draft.quotedDiaries)) quotedDiaries.value = draft.quotedDiaries
         if (typeof draft.backfillTime === 'string' && draft.backfillTime) {
           backfillTime.value = draft.backfillTime
           restored = true
@@ -176,6 +280,10 @@ onMounted(() => {
     }
   } catch {
     // ignore
+  }
+
+  if (props.initialQuote) {
+    addQuotedDiary(props.initialQuote)
   }
 
   if (!restored) {
@@ -190,17 +298,59 @@ onMounted(() => {
   }
 })
 
-watch([content, isBackfillMode, backfillTime], ([c, backfill, time]) => {
+watch([content, isBackfillMode, backfillTime, quotedDiaries], ([c, backfill, time, quotes]) => {
   try {
     localStorage.setItem(DRAFT_KEY, JSON.stringify({
       content: c,
       isBackfillMode: backfill,
-      backfillTime: time
+      backfillTime: time,
+      quotedDiaries: quotes
     }))
   } catch {
     // ignore
   }
+}, { deep: true })
+
+const addQuotedDiary = (diary) => {
+  if (!diary) return
+  const id = diary.id || diary.diary_id
+  if (!id || quotedDiaries.value.some(q => q.id === id)) return
+  quotedDiaries.value.push({
+    id,
+    content: diary.content || '',
+    summary: diary.summary || '',
+    mood: diary.mood || null,
+    mood_color: diary.mood_color || '#dc143c',
+    created_at: diary.created_at
+  })
+  isQuotePickerOpen.value = false
+  quoteSearchQuery.value = ''
+}
+
+const removeQuotedDiary = (id) => {
+  quotedDiaries.value = quotedDiaries.value.filter(q => q.id !== id)
+}
+
+const filteredQuoteCandidates = computed(() => {
+  const attachedIds = new Set(quotedDiaries.value.map(q => q.id))
+  const q = quoteSearchQuery.value.trim().toLowerCase()
+  return (props.allDiaries || [])
+    .filter(d => {
+      const id = d.id || d.diary_id
+      if (!id || attachedIds.has(id)) return false
+      if (!q) return true
+      const text = `${d.content || ''} ${d.summary || ''} ${d.mood || ''} ${(d.entities || []).join(' ')} ${formatQuoteTime(d.created_at)}`.toLowerCase()
+      return text.includes(q)
+    })
+    .slice(0, 12)
 })
+
+const formatQuoteTime = (timeStr) => {
+  if (!timeStr) return ''
+  const d = new Date(timeStr)
+  if (isNaN(d.getTime())) return timeStr
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
 
 const setQuickDate = (offset) => {
   const d = new Date()
@@ -230,11 +380,13 @@ const handleSave = () => {
     }
   }
 
+  const quoteIds = quotedDiaries.value.map(q => q.id)
   clearDraft()
   emit('save', {
     content: content.value.trim(),
     created_at: customCreatedAt,
-    isBackfill: isBackfillMode.value
+    isBackfill: isBackfillMode.value,
+    quoted_diary_ids: quoteIds
   })
 }
 </script>

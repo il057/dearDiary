@@ -140,7 +140,9 @@
     <DiaryComposerView
       v-if="isComposerOpen"
       :initial-date="composerInitialDate"
-      @close="isComposerOpen = false"
+      :initial-quote="composerInitialQuote"
+      :all-diaries="diaries"
+      @close="isComposerOpen = false; composerInitialQuote = null"
       @save="handleSaveNewDiary"
     />
 
@@ -157,6 +159,7 @@
       @filter-tag="handleFilterTag"
       @update-entities="handleUpdateDiaryEntities"
       @select-related="handleOpenDiaryById"
+      @quote="handleQuoteDiary"
     />
 
     <!-- 认知词典与别名对齐弹窗 -->
@@ -215,6 +218,7 @@ const isSideMenuOpen = ref(false)
 const isKnowledgeOpen = ref(Boolean(savedViewState.isKnowledgeOpen))
 const isComposerOpen = ref(Boolean(savedViewState.isComposerOpen))
 const composerInitialDate = ref(savedViewState.composerInitialDate || null)
+const composerInitialQuote = ref(null)
 const selectedDiary = ref(null)
 
 const diaries = ref([])
@@ -256,12 +260,26 @@ const switchTab = (tab) => {
   isSideMenuOpen.value = false
 }
 
-const openComposer = (dateStr = null) => {
+const openComposer = (dateStr = null, quoteDiary = null) => {
   composerInitialDate.value = dateStr
+  composerInitialQuote.value = quoteDiary
   isComposerOpen.value = true
 }
 
-const handleSelectDiary = (diary) => {
+const handleQuoteDiary = (diary) => {
+  selectedDiary.value = null
+  openComposer(null, diary)
+}
+
+const handleSelectDiary = async (diary) => {
+  const id = diary.id || diary.diary_id
+  if (diary.quoted_diaries === undefined && id) {
+    const existing = diaries.value.find(d => (d.id || d.diary_id) === id)
+    if (existing) {
+      selectedDiary.value = { ...diary, quoted_diaries: existing.quoted_diaries || [], quoted_by: existing.quoted_by || [] }
+      return
+    }
+  }
   selectedDiary.value = diary
 }
 
@@ -355,6 +373,7 @@ const fetchDiaries = async (force = false) => {
 
 const handleSaveNewDiary = async (payload) => {
   isComposerOpen.value = false
+  composerInitialQuote.value = null
   const tempId = Date.now()
   const optimisticCreatedAt = payload.created_at || new Date().toISOString()
   const optimisticItem = {
@@ -362,7 +381,9 @@ const handleSaveNewDiary = async (payload) => {
     content: payload.content,
     mood_color: '#dc143c',
     created_at: optimisticCreatedAt,
-    entities: []
+    entities: [],
+    quoted_diaries: [],
+    quoted_by: []
   }
 
   diaries.value.unshift(optimisticItem)
@@ -371,11 +392,14 @@ const handleSaveNewDiary = async (payload) => {
   showToast(payload.isBackfill ? '过往日记已补档，正在分析...' : '已记录，正在分析...')
 
   try {
-    const res = await diaryApi.createDiary(payload.content, payload.created_at)
+    const res = await diaryApi.createDiary(payload.content, payload.created_at, payload.quoted_diary_ids)
     const idx = diaries.value.findIndex(d => d.id === tempId)
     if (idx !== -1) {
       diaries.value[idx] = res.data
       diaries.value.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }
+    if (payload.quoted_diary_ids && payload.quoted_diary_ids.length > 0) {
+      fetchDiaries(true)
     }
     pollDiaryUntilFinished(res.data.id)
   } catch {
@@ -404,13 +428,16 @@ const handleUpdateDiary = async (payload) => {
   showToast('已保存修改')
 
   try {
-    const res = await diaryApi.updateDiary(targetId, payload.content, payload.created_at)
+    const res = await diaryApi.updateDiary(targetId, payload.content, payload.created_at, payload.quoted_diary_ids)
     if (idx !== -1) {
       diaries.value[idx] = res.data
       diaries.value.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     }
     if (selectedDiary.value && (selectedDiary.value.id || selectedDiary.value.diary_id) === targetId) {
       selectedDiary.value = res.data
+    }
+    if (Array.isArray(payload.quoted_diary_ids)) {
+      fetchDiaries(true)
     }
     pollDiaryUntilFinished(targetId)
   } catch {
@@ -422,7 +449,13 @@ const handleDeleteDiary = async (id) => {
   if (!confirm('确定删除该条记忆吗？')) return
   try {
     await diaryApi.deleteDiary(id)
-    diaries.value = diaries.value.filter(d => (d.id || d.diary_id) !== id)
+    diaries.value = diaries.value
+      .filter(d => (d.id || d.diary_id) !== id)
+      .map(d => ({
+        ...d,
+        quoted_diaries: (d.quoted_diaries || []).filter(q => q.id !== id),
+        quoted_by: (d.quoted_by || []).filter(q => q.id !== id)
+      }))
     if (selectedDiary.value && (selectedDiary.value.id || selectedDiary.value.diary_id) === id) {
       selectedDiary.value = null
     }

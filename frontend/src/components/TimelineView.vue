@@ -153,6 +153,17 @@
                 <span class="truncate">{{ item.matched_reason }}</span>
               </div>
 
+              <!-- 引用过往日记提示条 (如有) -->
+              <div
+                v-if="item.quoted_diaries && item.quoted_diaries.length > 0"
+                class="mb-2 px-2 py-1 bg-[#0b0b10] border border-[#1a1a22] border-l-2 border-l-[#dc143c]/80 rounded-xs text-[11px] text-zinc-400 flex items-center space-x-1.5"
+              >
+                <Quote class="w-3 h-3 text-[#dc143c] shrink-0" />
+                <span class="font-mono text-zinc-500 shrink-0">{{ formatCardTime(item.quoted_diaries[0].created_at) }}</span>
+                <span class="truncate text-zinc-400">{{ item.quoted_diaries[0].summary || item.quoted_diaries[0].content }}</span>
+                <span v-if="item.quoted_diaries.length > 1" class="text-[10px] text-zinc-600 font-mono shrink-0">+{{ item.quoted_diaries.length - 1 }}</span>
+              </div>
+
               <!-- 正文缩略展示：2-3行截断（支持搜索关键词/实体高亮） -->
               <p class="text-zinc-300 text-xs sm:text-[13px] leading-relaxed line-clamp-3 font-normal select-none">
                 <template v-if="highlightTerms.length > 0">
@@ -191,9 +202,19 @@
                 </span>
               </div>
 
-              <span class="text-[10px] text-zinc-600 group-hover:text-[#f43f5e] transition-colors font-mono shrink-0 ml-2">
-                全文 →
-              </span>
+              <div class="flex items-center space-x-2 shrink-0 ml-2">
+                <span
+                  v-if="item.quoted_by && item.quoted_by.length > 0"
+                  class="inline-flex items-center space-x-0.5 text-[10px] text-[#f43f5e]/80 font-mono"
+                  :title="`被 ${item.quoted_by.length} 篇后续日记引用`"
+                >
+                  <Quote class="w-2.5 h-2.5" />
+                  <span>{{ item.quoted_by.length }}</span>
+                </span>
+                <span class="text-[10px] text-zinc-600 group-hover:text-[#f43f5e] transition-colors font-mono">
+                  全文 →
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -215,7 +236,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { ArrowUp } from '@lucide/vue'
+import { ArrowUp, Quote } from '@lucide/vue'
 import { splitHighlightSegments, isEntityHighlighted } from '../utils/highlight'
 
 const props = defineProps({

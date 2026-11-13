@@ -35,6 +35,15 @@
           </button>
 
           <button
+            @click="$emit('quote', diary)"
+            class="inline-flex items-center space-x-1 px-3 py-1 bg-[#180a0e] hover:bg-[#260e15] text-[#fda4af] rounded-xs border border-[#dc143c]/40 text-xs transition-colors cursor-pointer"
+            title="引用这篇日记并写新感悟"
+          >
+            <Quote class="w-3 h-3 text-[#dc143c]" />
+            <span>引用</span>
+          </button>
+
+          <button
             @click="startEdit"
             class="inline-flex items-center space-x-1 px-3 py-1 bg-neutral-900 hover:bg-neutral-800 text-zinc-200 rounded-xs border border-neutral-800 text-xs transition-colors cursor-pointer"
           >
@@ -88,6 +97,34 @@
           <span class="text-[11px] text-zinc-500 font-mono">{{ editDraftContent.length }} 字</span>
         </div>
 
+        <!-- 编辑状态下的引用管理 -->
+        <div v-if="editDraftQuotes.length > 0" class="space-y-2">
+          <div
+            v-for="q in editDraftQuotes"
+            :key="q.id"
+            class="flex items-start justify-between gap-3 p-3 bg-[#09090d] border border-[#1c1c24] border-l-2 border-l-[#dc143c] rounded-xs"
+          >
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex items-center space-x-2 text-[11px] select-none">
+                <Quote class="w-3 h-3 text-[#dc143c] shrink-0" />
+                <span class="font-mono text-zinc-400">引用 · {{ formatCleanTime(q.created_at) }}</span>
+                <span v-if="q.mood" class="px-1.5 py-0.2 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/30 rounded-xs text-[10px]">
+                  {{ q.mood }}
+                </span>
+              </div>
+              <p class="text-xs text-zinc-300 line-clamp-2 leading-relaxed">{{ q.content }}</p>
+            </div>
+            <button
+              type="button"
+              @click="editDraftQuotes = editDraftQuotes.filter(item => item.id !== q.id)"
+              class="p-1 text-zinc-500 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+              title="移除引用"
+            >
+              <X class="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
         <!-- 编辑大文本框 -->
         <textarea
           v-model="editDraftContent"
@@ -129,6 +166,30 @@
         <div v-if="diary.matched_reason" class="p-2.5 bg-[#180a0e] border border-[#dc143c]/30 text-[#f43f5e] rounded-xs text-xs flex items-center space-x-2">
           <Sparkles class="w-4 h-4 text-[#dc143c]" />
           <span>{{ diary.matched_reason }}</span>
+        </div>
+
+        <!-- 引用的过往日记 (如有) -->
+        <div v-if="diary.quoted_diaries && diary.quoted_diaries.length > 0" class="space-y-2 select-none">
+          <div
+            v-for="q in diary.quoted_diaries"
+            :key="q.id"
+            @click="$emit('select-related', q.id)"
+            class="p-3.5 bg-[#09090d] hover:bg-[#100a0d] border border-[#1c1c24] hover:border-[#dc143c]/50 border-l-2 border-l-[#dc143c] rounded-xs transition-colors cursor-pointer space-y-1.5 group"
+          >
+            <div class="flex items-center justify-between text-[11px]">
+              <div class="flex items-center space-x-2 min-w-0">
+                <Quote class="w-3 h-3 text-[#dc143c] shrink-0" />
+                <span class="font-mono text-zinc-400">引用自 {{ formatCleanTime(q.created_at) }}</span>
+                <span v-if="q.mood" class="px-1.5 py-0.2 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/30 rounded-xs text-[10px] shrink-0">
+                  {{ q.mood }}
+                </span>
+              </div>
+              <span class="text-[10px] text-zinc-600 group-hover:text-[#f43f5e] font-mono transition-colors shrink-0">查看原文 →</span>
+            </div>
+            <p class="text-xs sm:text-[13px] text-zinc-300 group-hover:text-zinc-100 line-clamp-3 leading-relaxed">
+              {{ q.content }}
+            </p>
+          </div>
         </div>
 
         <!-- 完整长文内容展示（支持搜索关键词/实体高亮） -->
@@ -203,6 +264,39 @@
           </div>
         </div>
 
+        <!-- 后续引用 / 感悟 (被哪些后来的日记引用了) -->
+        <div v-if="diary.quoted_by && diary.quoted_by.length > 0" class="pt-6 border-t border-[#18181f] space-y-3 select-none">
+          <div class="flex items-center justify-between text-xs text-zinc-500">
+            <span class="font-mono uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+              <Quote class="w-3 h-3 text-[#dc143c]" />
+              <span>后续引用 ({{ diary.quoted_by.length }})</span>
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div
+              v-for="item in diary.quoted_by"
+              :key="item.id"
+              @click="$emit('select-related', item.id)"
+              class="p-3 bg-[#09090d] hover:bg-[#100a0d] border border-[#1c1c24] hover:border-[#dc143c]/50 border-l-2 border-l-[#dc143c]/70 rounded-xs transition-colors cursor-pointer space-y-1.5 group"
+            >
+              <div class="flex items-center justify-between text-[11px]">
+                <div class="flex items-center space-x-1.5 min-w-0">
+                  <span class="text-xs leading-none shrink-0" :style="{ color: item.mood_color || '#dc143c' }">✦</span>
+                  <span class="font-mono text-zinc-400 shrink-0">{{ formatCleanTime(item.created_at) }}</span>
+                  <span v-if="item.mood" class="px-1.5 py-0.2 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/30 rounded-xs text-[10px] shrink-0">
+                    {{ item.mood }}
+                  </span>
+                </div>
+                <span class="text-[10px] text-zinc-600 group-hover:text-[#f43f5e] font-mono shrink-0 ml-2">查看 →</span>
+              </div>
+              <p class="text-xs text-zinc-300 group-hover:text-zinc-100 line-clamp-2 leading-relaxed">
+                {{ item.content }}
+              </p>
+            </div>
+          </div>
+        </div>
+
         <!-- 相关历史记忆推荐 -->
         <div v-if="relatedLoading || relatedDiaries.length > 0" class="pt-6 border-t border-[#18181f] space-y-3 select-none">
           <div class="flex items-center justify-between text-xs text-zinc-500">
@@ -249,7 +343,7 @@
 import { ref, watch } from 'vue'
 import {
   ArrowLeft, RefreshCw, Pencil, Trash2, Check,
-  Clock, Sparkles, X, Plus
+  Clock, Sparkles, X, Plus, Quote
 } from '@lucide/vue'
 import { splitHighlightSegments, isEntityHighlighted } from '../utils/highlight'
 import { diaryApi } from '../api/diary'
@@ -270,12 +364,13 @@ const props = defineProps({
 })
 
 const emit = defineEmits([
-  'close', 'update', 'delete', 'reindex', 'filter-tag', 'update-entities', 'select-related'
+  'close', 'update', 'delete', 'reindex', 'filter-tag', 'update-entities', 'select-related', 'quote'
 ])
 
 const isEditing = ref(false)
 const editDraftContent = ref('')
 const editDraftTime = ref('')
+const editDraftQuotes = ref([])
 const isAddingTag = ref(false)
 const newTagText = ref('')
 const relatedDiaries = ref([])
@@ -317,6 +412,7 @@ const toDatetimeLocal = (isoStr) => {
 const startEdit = () => {
   editDraftContent.value = props.diary.content || ''
   editDraftTime.value = toDatetimeLocal(props.diary.created_at)
+  editDraftQuotes.value = [...(props.diary.quoted_diaries || [])]
   isEditing.value = true
 }
 
@@ -324,6 +420,7 @@ const cancelEdit = () => {
   isEditing.value = false
   editDraftContent.value = ''
   editDraftTime.value = ''
+  editDraftQuotes.value = []
 }
 
 const saveEdit = () => {
@@ -342,7 +439,8 @@ const saveEdit = () => {
   emit('update', {
     id: props.diary.id || props.diary.diary_id,
     content: updatedText,
-    created_at: customCreatedAt
+    created_at: customCreatedAt,
+    quoted_diary_ids: editDraftQuotes.value.map(q => q.id)
   })
 }
 

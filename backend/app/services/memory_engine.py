@@ -5,11 +5,11 @@ import datetime
 from typing import List, Dict, Any, Set, Optional
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
-from app.models import Diary, Entity, EntityRelation, DiaryEntity
+from app.models import Diary, Entity, EntityRelation, DiaryEntity, DiaryQuote
 from app.services.llm_client import llm_service
 from app.services.vector_store import vector_store
 from app.schemas import (
-    SearchResultItem, SearchResponse, DiaryOut, GraphResponse, GraphNode, GraphLink,
+    SearchResultItem, SearchResponse, DiaryOut, DiaryQuoteRef, GraphResponse, GraphNode, GraphLink,
     EntityGraphNode, EntityGraphLink, EntityGraphResponse
 )
 from app.database import SessionLocal
@@ -124,6 +124,96 @@ class MemoryEngine:
             db.commit()
         return updated
 
+    def sync_diary_quotes(self, db: Session, diary_id: int, quoted_diary_ids: Optional[List[int]]):
+        """同步某篇日记引用的历史日记列表（传入 None 时保持不变）"""
+        if quoted_diary_ids is None:
+            return
+        seen = set()
+        clean_ids: List[int] = []
+        for qid in quoted_diary_ids:
+            if isinstance(qid, int) and qid != diary_id and qid not in seen:
+                seen.add(qid)
+                clean_ids.append(qid)
+
+        db.query(DiaryQuote).filter(DiaryQuote.diary_id == diary_id).delete(synchronize_session=False)
+        if clean_ids:
+            valid_ids = {
+                row[0] for row in db.query(Diary.id).filter(Diary.id.in_(clean_ids)).all()
+            }
+            for qid in clean_ids:
+                if qid in valid_ids:
+                    db.add(DiaryQuote(diary_id=diary_id, quoted_diary_id=qid))
+        db.commit()
+
+    def build_diary_out_list(self, db: Session, diaries: List[Diary]) -> List[DiaryOut]:
+        """批量组装 DiaryOut，包含实体标签、情绪色及双向引用关系"""
+        if not diaries:
+            return []
+
+        diary_ids = [d.id for d in diaries]
+        quote_rows = (
+            db.query(DiaryQuote)
+            .filter(or_(DiaryQuote.diary_id.in_(diary_ids), DiaryQuote.quoted_diary_id.in_(diary_ids)))
+            .order_by(DiaryQuote.id.asc())
+            .all()
+        )
+
+        ref_ids: Set[int] = set()
+        for q in quote_rows:
+            ref_ids.add(q.diary_id)
+            ref_ids.add(q.quoted_diary_id)
+
+        diary_map: Dict[int, Diary] = {d.id: d for d in diaries}
+        missing_ids = ref_ids - set(diary_map.keys())
+        if missing_ids:
+            for rd in db.query(Diary).filter(Diary.id.in_(missing_ids)).all():
+                diary_map[rd.id] = rd
+
+        quoted_map: Dict[int, List[DiaryQuoteRef]] = {did: [] for did in diary_ids}
+        quoted_by_map: Dict[int, List[DiaryQuoteRef]] = {did: [] for did in diary_ids}
+
+        def _to_ref(d: Diary) -> DiaryQuoteRef:
+            return DiaryQuoteRef(
+                id=d.id,
+                content=d.content,
+                summary=d.summary,
+                mood=d.mood,
+                mood_color=d.mood_color or "#dc143c",
+                created_at=d.created_at,
+            )
+
+        for q in quote_rows:
+            if q.diary_id in quoted_map and q.quoted_diary_id in diary_map:
+                quoted_map[q.diary_id].append(_to_ref(diary_map[q.quoted_diary_id]))
+            if q.quoted_diary_id in quoted_by_map and q.diary_id in diary_map:
+                quoted_by_map[q.quoted_diary_id].append(_to_ref(diary_map[q.diary_id]))
+
+        results: List[DiaryOut] = []
+        color_backfilled = False
+        for d in diaries:
+            had_color = bool(d.mood_color)
+            color = self.ensure_mood_color(db, d, commit=False)
+            if not had_color:
+                color_backfilled = True
+            quoted_by_sorted = sorted(quoted_by_map.get(d.id, []), key=lambda x: x.created_at, reverse=True)
+            results.append(DiaryOut(
+                id=d.id,
+                content=d.content,
+                summary=d.summary,
+                mood=d.mood,
+                mood_color=color,
+                created_at=d.created_at,
+                entities=[b.entity.name for b in d.entities if b.entity],
+                quoted_diaries=quoted_map.get(d.id, []),
+                quoted_by=quoted_by_sorted,
+            ))
+        if color_backfilled:
+            db.commit()
+        return results
+
+    def build_diary_out(self, db: Session, diary: Diary) -> DiaryOut:
+        return self.build_diary_out_list(db, [diary])[0]
+
     def create_diary_immediate(self, db: Session, content: str, created_at: Optional[datetime.datetime] = None) -> Diary:
         lines = [line.strip() for line in content.splitlines() if line.strip()]
         first_line = lines[0] if lines else content[:30]
@@ -224,16 +314,7 @@ class MemoryEngine:
 
             self.invalidate_graph_cache()
             db.refresh(diary)
-            color = diary.mood_color or vector_to_hex_color(primary_vector or [])
-            return DiaryOut(
-                id=diary.id,
-                content=diary.content,
-                summary=diary.summary,
-                mood=diary.mood,
-                mood_color=color,
-                created_at=diary.created_at,
-                entities=[b.entity.name for b in diary.entities if b.entity]
-            )
+            return self.build_diary_out(db, diary)
         finally:
             db.close()
 
@@ -293,6 +374,21 @@ class MemoryEngine:
         links: List[GraphLink] = []
         node_degree: Dict[int, int] = {d.id: 0 for d in all_items}
         existing_edges = set()
+
+        # 优先加入显式引用关系边
+        for q in db.query(DiaryQuote).all():
+            if q.diary_id in diary_map and q.quoted_diary_id in diary_map and q.diary_id != q.quoted_diary_id:
+                pair = tuple(sorted([q.diary_id, q.quoted_diary_id]))
+                if pair not in existing_edges:
+                    existing_edges.add(pair)
+                    links.append(GraphLink(
+                        source=pair[0],
+                        target=pair[1],
+                        value=3.0,
+                        reason="引用关联"
+                    ))
+                    node_degree[pair[0]] += 1
+                    node_degree[pair[1]] += 1
 
         for d1 in all_items:
             v1 = cached_vectors[d1.id]

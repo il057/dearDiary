@@ -5,10 +5,12 @@ from pydantic import BaseModel, Field
 class DiaryCreate(BaseModel):
     content: str = Field(..., description="随手记或日记内容")
     created_at: Optional[datetime.datetime] = Field(None, description="自定义补档创建时间")
+    quoted_diary_ids: Optional[List[int]] = Field(None, description="引用的历史日记 ID 列表")
 
 class DiaryUpdate(BaseModel):
     content: str = Field(..., description="更新后的日记内容")
     created_at: Optional[datetime.datetime] = Field(None, description="更新后的时间")
+    quoted_diary_ids: Optional[List[int]] = Field(None, description="更新后的引用日记 ID 列表（不传则保持不变）")
 
 class DiaryEntitiesUpdate(BaseModel):
     entities: List[str] = Field(..., description="日记关联的实体标签列表")
@@ -68,6 +70,17 @@ class EntityGraphResponse(BaseModel):
     nodes: List[EntityGraphNode] = []
     links: List[EntityGraphLink] = []
 
+class DiaryQuoteRef(BaseModel):
+    id: int
+    content: str
+    summary: Optional[str] = None
+    mood: Optional[str] = None
+    mood_color: Optional[str] = "#dc143c"
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
 class DiaryOut(BaseModel):
     id: int
     content: str
@@ -76,6 +89,8 @@ class DiaryOut(BaseModel):
     mood_color: Optional[str] = "#dc143c"
     created_at: datetime.datetime
     entities: List[str] = []
+    quoted_diaries: List[DiaryQuoteRef] = []
+    quoted_by: List[DiaryQuoteRef] = []
 
     class Config:
         from_attributes = True

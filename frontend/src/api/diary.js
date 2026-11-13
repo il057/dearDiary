@@ -18,18 +18,24 @@ export const diaryApi = {
     return api.get(`/diaries/${id}/related`, { params: { limit } })
   },
   
-  createDiary(content, created_at = null) {
+  createDiary(content, created_at = null, quoted_diary_ids = null) {
     const payload = { content }
     if (created_at) {
       payload.created_at = created_at
     }
+    if (Array.isArray(quoted_diary_ids) && quoted_diary_ids.length > 0) {
+      payload.quoted_diary_ids = quoted_diary_ids
+    }
     return api.post('/diaries', payload)
   },
 
-  updateDiary(id, content, created_at = null) {
+  updateDiary(id, content, created_at = null, quoted_diary_ids = null) {
     const payload = { content }
     if (created_at) {
       payload.created_at = created_at
+    }
+    if (Array.isArray(quoted_diary_ids)) {
+      payload.quoted_diary_ids = quoted_diary_ids
     }
     return api.put(`/diaries/${id}`, payload)
   },

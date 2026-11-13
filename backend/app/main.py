@@ -9,7 +9,7 @@ from sqlalchemy import func, or_
 
 from app.config import settings
 from app.database import engine, Base, get_db, ensure_sqlite_migrations
-from app.models import Diary, Entity, EntityRelation, DiaryEntity
+from app.models import Diary, Entity, EntityRelation, DiaryEntity, DiaryQuote
 from app.schemas import (
     DiaryCreate, DiaryUpdate, DiaryEntitiesUpdate, DiaryMoodUpdate, AliasCreateRequest, EntityTypeUpdateRequest, RelationCreateRequest, OwnerNameUpdateRequest, DiaryOut, SearchResultItem, SearchResponse, GraphResponse, EntityGraphResponse, EntityOut, RelationOut, DiaryImportRequest
 )
@@ -50,19 +50,12 @@ def create_diary(payload: DiaryCreate, db: Session = Depends(get_db)):
     if not payload.content.strip():
         raise HTTPException(status_code=400, detail="日记内容不能为空")
     diary = memory_engine.create_diary_immediate(db, payload.content, created_at=payload.created_at)
-    color = memory_engine.ensure_mood_color(db, diary)
+    memory_engine.sync_diary_quotes(db, diary.id, payload.quoted_diary_ids)
+    memory_engine.ensure_mood_color(db, diary)
     memory_engine.invalidate_graph_cache()
     _enqueue_memory_task(diary.id)
 
-    return DiaryOut(
-        id=diary.id,
-        content=diary.content,
-        summary=diary.summary,
-        mood=diary.mood,
-        mood_color=color,
-        created_at=diary.created_at,
-        entities=[]
-    )
+    return memory_engine.build_diary_out(db, diary)
 
 @app.put("/api/diaries/{diary_id}", response_model=DiaryOut)
 def update_diary(diary_id: int, payload: DiaryUpdate, db: Session = Depends(get_db)):
@@ -72,20 +65,13 @@ def update_diary(diary_id: int, payload: DiaryUpdate, db: Session = Depends(get_
     if not diary:
         raise HTTPException(status_code=404, detail="未找到该篇日记")
 
+    memory_engine.sync_diary_quotes(db, diary.id, payload.quoted_diary_ids)
     diary.mood_color = None
-    color = memory_engine.ensure_mood_color(db, diary)
+    memory_engine.ensure_mood_color(db, diary)
     memory_engine.invalidate_graph_cache()
     _enqueue_memory_task(diary.id)
 
-    return DiaryOut(
-        id=diary.id,
-        content=diary.content,
-        summary=diary.summary,
-        mood=diary.mood,
-        mood_color=color,
-        created_at=diary.created_at,
-        entities=[b.entity.name for b in diary.entities if b.entity]
-    )
+    return memory_engine.build_diary_out(db, diary)
 
 @app.put("/api/diaries/{diary_id}/mood")
 def update_diary_mood(diary_id: int, payload: DiaryMoodUpdate, db: Session = Depends(get_db)):
@@ -107,16 +93,7 @@ def get_single_diary(diary_id: int, db: Session = Depends(get_db)):
     )
     if not diary:
         raise HTTPException(status_code=404, detail="日记不存在")
-    color = memory_engine.ensure_mood_color(db, diary)
-    return DiaryOut(
-        id=diary.id,
-        content=diary.content,
-        summary=diary.summary,
-        mood=diary.mood,
-        mood_color=color,
-        created_at=diary.created_at,
-        entities=[b.entity.name for b in diary.entities if b.entity]
-    )
+    return memory_engine.build_diary_out(db, diary)
 
 @app.get("/api/diaries/{diary_id}/related", response_model=List[SearchResultItem])
 def get_related_diaries(diary_id: int, limit: int = Query(5, ge=1, le=20), db: Session = Depends(get_db)):
@@ -148,25 +125,7 @@ def list_diaries(skip: int = 0, limit: int = 500, db: Session = Depends(get_db))
         .limit(limit)
         .all()
     )
-    results = []
-    color_backfilled = False
-    for d in items:
-        had_color = bool(d.mood_color)
-        color = memory_engine.ensure_mood_color(db, d, commit=False)
-        if not had_color:
-            color_backfilled = True
-        results.append(DiaryOut(
-            id=d.id,
-            content=d.content,
-            summary=d.summary,
-            mood=d.mood,
-            mood_color=color,
-            created_at=d.created_at,
-            entities=[b.entity.name for b in d.entities if b.entity]
-        ))
-    if color_backfilled:
-        db.commit()
-    return results
+    return memory_engine.build_diary_out_list(db, items)
 
 @app.delete("/api/diaries/{diary_id}")
 def delete_diary(diary_id: int, db: Session = Depends(get_db)):
@@ -176,6 +135,7 @@ def delete_diary(diary_id: int, db: Session = Depends(get_db)):
     from app.services.vector_store import vector_store
     vector_store.delete_by_diary_id(diary_id)
     db.query(EntityRelation).filter(EntityRelation.diary_id == diary_id).delete(synchronize_session=False)
+    db.query(DiaryQuote).filter(or_(DiaryQuote.diary_id == diary_id, DiaryQuote.quoted_diary_id == diary_id)).delete(synchronize_session=False)
     db.delete(diary)
     db.commit()
     memory_engine.cleanup_orphan_entities(db)
