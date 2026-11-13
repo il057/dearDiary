@@ -1,0 +1,343 @@
+<template>
+  <div class="space-y-5 relative w-full">
+    <!-- 极简年份索引栏 (水平紧凑滚动，不吸顶，避免移动端重叠) -->
+    <div
+      v-if="!loading && items.length > 0"
+      class="w-full bg-[#09090c] border border-[#1a1a20] rounded-xs p-2.5 flex items-center justify-between gap-3 text-xs select-none"
+    >
+      <div class="flex items-center space-x-2 shrink-0">
+        <span class="w-1.5 h-1.5 bg-[#dc143c]"></span>
+        <span class="text-zinc-400 font-medium font-mono text-[11px]">年份索引</span>
+      </div>
+
+      <!-- 年份胶囊 -->
+      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        <button
+          v-for="yObj in yearGroups"
+          :key="yObj.year"
+          @click="scrollToYear(yObj.year)"
+          class="shrink-0 px-2.5 py-0.5 rounded-xs text-xs font-mono transition-colors border cursor-pointer"
+          :class="activeYear === yObj.year
+            ? 'bg-[#180a0e] text-[#f43f5e] border-[#dc143c]/60'
+            : 'bg-[#050505] text-zinc-400 hover:text-zinc-200 border-[#1c1c22]'"
+        >
+          <span>{{ yObj.year }}</span>
+          <span class="text-[10px] ml-1 text-zinc-600">({{ yObj.count }})</span>
+        </button>
+      </div>
+
+      <!-- 快捷回顶与穿梭至最初 -->
+      <div class="flex items-center space-x-1.5 shrink-0">
+        <button
+          @click="scrollToOldest"
+          class="px-2 py-0.5 bg-[#050505] hover:bg-[#141418] text-zinc-400 hover:text-zinc-200 border border-[#1c1c22] rounded-xs text-[11px] cursor-pointer"
+          title="直达最早记录"
+        >
+          最初
+        </button>
+        <button
+          @click="scrollToTop"
+          class="px-2 py-0.5 bg-[#050505] hover:bg-[#141418] text-[#f43f5e] border border-[#1c1c22] rounded-xs text-[11px] cursor-pointer"
+          title="回到最新"
+        >
+          最新
+        </button>
+      </div>
+    </div>
+
+    <!-- 加载中动画 -->
+    <div v-if="loading" class="py-24 text-center text-zinc-500 text-xs animate-pulse font-mono flex flex-col items-center justify-center space-y-2">
+      <span class="w-2 h-2 bg-[#dc143c] animate-ping"></span>
+      <span>正在穿梭记忆时间轴...</span>
+    </div>
+
+    <!-- 空数据提示 -->
+    <div v-else-if="items.length === 0" class="py-24 text-center select-none">
+      <div class="inline-flex p-3 rounded-xs bg-[#0c0c0f] border border-[#1c1c22] text-zinc-500 mb-3">
+        <BookOpen class="w-5 h-5 text-[#dc143c]" />
+      </div>
+      <p class="text-zinc-500 text-xs">空空如也，随时记录下今日的第一条随想吧</p>
+    </div>
+
+    <!-- 垂直时间线轴 + 按年月分组的有序卡片流 -->
+    <div v-else class="relative pl-4 sm:pl-7 ml-1 sm:ml-2 border-l border-[#1c1c24] space-y-8 pb-8">
+      <div
+        v-for="group in timelineGroups"
+        :key="group.key"
+        :id="'month-anchor-' + group.key"
+        class="relative scroll-mt-28"
+      >
+        <!-- 年/月切换提醒节点：直接锚定在左侧时间轴线上 -->
+        <div class="flex items-center space-x-3 mb-3.5 select-none">
+          <!-- 时间线上的节点标志：跨年为实心高亮 Crimson 方块，跨月为精致空心红点 -->
+          <span
+            v-if="group.isNewYear"
+            class="absolute -left-[21px] sm:-left-[33px] w-2.5 h-2.5 bg-[#dc143c] shadow-[0_0_8px_rgba(220,20,60,0.8)]"
+          ></span>
+          <span
+            v-else
+            class="absolute -left-[20px] sm:-left-[32px] w-2 h-2 rounded-full bg-[#050505] border border-[#dc143c]/80"
+          ></span>
+
+          <!-- 年份 & 月份提醒标签 -->
+          <div class="flex items-baseline space-x-2">
+            <span
+              v-if="group.isNewYear"
+              class="text-base sm:text-lg font-bold font-mono text-zinc-100 tracking-tight"
+            >
+              {{ group.year }}<span class="text-[#dc143c] ml-0.5">.</span>
+            </span>
+            <span
+              class="text-xs sm:text-sm font-mono font-medium"
+              :class="group.isNewYear ? 'text-[#f43f5e]' : 'text-zinc-300'"
+            >
+              {{ group.month }}月
+            </span>
+            <span class="text-[10px] text-zinc-600 font-mono">
+              · {{ group.items.length }} 篇
+            </span>
+          </div>
+
+          <!-- 柔和的时间跨度分割延伸线 -->
+          <div class="flex-1 h-px bg-gradient-to-r from-[#1e1e26] via-[#14141a] to-transparent"></div>
+        </div>
+
+        <!-- 该月份内的日记卡片：严格按时间顺序铺开（Grid 多列铺满 Web 宽屏，移动端单列） -->
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          <div
+            v-for="item in group.items"
+            :key="item.id || item.diary_id"
+            :id="'diary-card-' + (item.id || item.diary_id)"
+            @click="$emit('select-diary', item)"
+            class="group flex flex-col justify-between bg-[#09090c] hover:bg-[#0d0d12] border border-[#19191f] hover:border-[#dc143c]/50 rounded-xs p-3.5 transition-all duration-200 cursor-pointer scroll-mt-28"
+            :class="[
+              highlightedId === (item.id || item.diary_id)
+                ? 'border-[#dc143c] ring-1 ring-[#dc143c]/60 bg-[#14080a]'
+                : ''
+            ]"
+          >
+            <div>
+              <!-- 卡片头部：微光点、具体日期时间、心境 -->
+              <div class="flex items-center justify-between text-xs text-zinc-500 mb-2 pb-1.5 border-b border-[#141418]">
+                <div class="flex items-center space-x-2">
+                  <span
+                    class="w-2 h-2 rounded-full shrink-0"
+                    :style="{
+                      backgroundColor: item.mood_color || '#dc143c',
+                      boxShadow: `0 0 6px ${item.mood_color || '#dc143c'}60`
+                    }"
+                  ></span>
+                  <span class="font-mono text-zinc-400 text-[11px]">
+                    {{ formatCardTime(item.created_at) }}
+                  </span>
+                </div>
+
+                <div class="flex items-center space-x-1">
+                  <span v-if="item.mood" class="px-1.5 py-0.5 bg-[#16090c] text-[#f43f5e] border border-[#dc143c]/25 rounded-xs text-[10px]">
+                    {{ item.mood }}
+                  </span>
+                  <span v-if="processingIds.has(item.id || item.diary_id)" class="w-1.5 h-1.5 rounded-full bg-[#dc143c] animate-pulse"></span>
+                </div>
+              </div>
+
+              <!-- 语义检索命中指示 (如有) -->
+              <div v-if="item.matched_reason" class="mb-2 text-[10px] text-[#f43f5e] bg-[#16090c] px-1.5 py-0.5 rounded-xs border border-[#dc143c]/20 inline-flex items-center space-x-1">
+                <Sparkles class="w-3 h-3 text-[#dc143c]" />
+                <span class="truncate">{{ item.matched_reason }}</span>
+              </div>
+
+              <!-- 正文缩略展示：2-3行截断 -->
+              <p class="text-zinc-300 text-xs sm:text-[13px] leading-relaxed line-clamp-3 font-normal select-none">
+                {{ item.content }}
+              </p>
+            </div>
+
+            <!-- 底部语义实体标签栏 -->
+            <div class="mt-3 pt-2 border-t border-[#141418] flex items-center justify-between text-[11px] text-zinc-500">
+              <div class="flex flex-wrap items-center gap-1 overflow-hidden max-h-5">
+                <span
+                  v-for="ent in (item.entities || item.related_entities || []).slice(0, 3)"
+                  :key="ent"
+                  class="px-1.5 py-0.2 bg-[#060608] text-zinc-400 rounded-xs border border-[#1a1a20] text-[10px]"
+                >
+                  #{{ ent }}
+                </span>
+                <span
+                  v-if="(item.entities || item.related_entities || []).length > 3"
+                  class="text-[9px] text-zinc-600 font-mono"
+                >
+                  +{{ (item.entities || item.related_entities || []).length - 3 }}
+                </span>
+              </div>
+
+              <span class="text-[10px] text-zinc-600 group-hover:text-[#f43f5e] transition-colors font-mono shrink-0 ml-2">
+                全文 →
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右下角快速置顶悬浮按钮 (仅 Web 端显示，移动端点击顶部灵动岛/状态栏即可回顶) -->
+    <div class="hidden sm:block fixed bottom-[max(env(safe-area-inset-bottom),1.5rem)] right-5 sm:right-8 z-30 pointer-events-auto">
+      <button
+        @click="scrollToTop"
+        class="p-2.5 bg-[#09090c]/90 hover:bg-[#180a0e] text-zinc-400 hover:text-[#f43f5e] rounded-xs border border-[#1e1e26] hover:border-[#dc143c]/50 shadow-xl backdrop-blur-md transition-all cursor-pointer"
+        title="返回顶部"
+      >
+        <ArrowUp class="w-4 h-4" />
+      </button>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import { BookOpen, Sparkles, ArrowUp } from '@lucide/vue'
+
+const props = defineProps({
+  items: {
+    type: Array,
+    default: () => []
+  },
+  loading: {
+    type: Boolean,
+    default: false
+  },
+  processingIds: {
+    type: Set,
+    default: () => new Set()
+  }
+})
+
+defineEmits(['select-diary'])
+
+const highlightedId = ref(null)
+const activeYear = ref('')
+
+// 年份统计（用于顶部索引）
+const yearGroups = computed(() => {
+  const map = {}
+  props.items.forEach(d => {
+    if (!d.created_at) return
+    const dt = new Date(d.created_at)
+    if (isNaN(dt.getTime())) return
+    const y = String(dt.getFullYear())
+    map[y] = (map[y] || 0) + 1
+  })
+
+  return Object.keys(map)
+    .sort((a, b) => Number(b) - Number(a))
+    .map(y => ({
+      year: y,
+      count: map[y]
+    }))
+})
+
+// 按连续的年月顺序分段，同时精准标记跨年切换
+const timelineGroups = computed(() => {
+  const groups = []
+  let lastKey = null
+  let lastYear = null
+
+  props.items.forEach(item => {
+    let y = '未知'
+    let m = '00'
+    if (item.created_at) {
+      const dt = new Date(item.created_at)
+      if (!isNaN(dt.getTime())) {
+        y = String(dt.getFullYear())
+        m = String(dt.getMonth() + 1).padStart(2, '0')
+      }
+    }
+    const key = `${y}-${m}`
+
+    if (key !== lastKey) {
+      const isNewYear = y !== lastYear
+      groups.push({
+        key,
+        year: y,
+        month: m,
+        isNewYear,
+        items: [item]
+      })
+      lastKey = key
+      lastYear = y
+    } else {
+      groups[groups.length - 1].items.push(item)
+    }
+  })
+
+  return groups
+})
+
+const scrollToTop = () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const scrollToOldest = () => {
+  if (props.items.length === 0) return
+  const oldest = props.items[props.items.length - 1]
+  scrollToItem(oldest.id || oldest.diary_id)
+}
+
+const scrollToYear = (y) => {
+  activeYear.value = y
+  const group = timelineGroups.value.find(g => g.year === y)
+  if (group) {
+    const el = document.getElementById('month-anchor-' + group.key)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+}
+
+const scrollToItem = (id) => {
+  const el = document.getElementById('diary-card-' + id)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    highlightedId.value = id
+    setTimeout(() => {
+      highlightedId.value = null
+    }, 2500)
+  }
+}
+
+defineExpose({
+  scrollToItem,
+  scrollToOldest,
+  scrollToDate: (dateStr) => {
+    if (!dateStr || props.items.length === 0) return
+    const targetTime = new Date(dateStr).getTime()
+    let closestItem = props.items[0]
+    let minDiff = Infinity
+
+    props.items.forEach(item => {
+      if (!item.created_at) return
+      const t = new Date(item.created_at).getTime()
+      const diff = Math.abs(t - targetTime)
+      if (diff < minDiff) {
+        minDiff = diff
+        closestItem = item
+      }
+    })
+
+    if (closestItem) {
+      scrollToItem(closestItem.id || closestItem.diary_id)
+    }
+  }
+})
+
+const formatCardTime = (timeStr) => {
+  if (!timeStr) return ''
+  const d = new Date(timeStr)
+  if (isNaN(d.getTime())) return timeStr
+  const isDefaultNoon = d.getHours() === 12 && d.getMinutes() === 0 && d.getSeconds() === 0
+  
+  if (isDefaultNoon) {
+    return `${d.getMonth() + 1}月${d.getDate()}日`
+  }
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+</script>

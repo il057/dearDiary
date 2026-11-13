@@ -1,0 +1,13 @@
+{
+  "aliases": {
+    "Alex": "Alexander",
+    "阿强": "张伟",
+    "XiaoMing": "小明"
+  },
+  "custom_entities": {
+    "Alexander": "person",
+    "张伟": "person",
+    "小明": "person",
+    "咖啡馆": "place"
+  }
+}

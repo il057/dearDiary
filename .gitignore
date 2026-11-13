@@ -1,0 +1,27 @@
+# Python & Virtualenv
+__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+venv/
+ENV/
+*.sqlite3
+
+# 数据与持久化索引（不要把日记隐私与本地向量库传到 Github）
+backend/data/
+*.db
+backend/.env
+
+# Node & Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+

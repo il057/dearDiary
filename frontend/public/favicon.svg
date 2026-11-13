@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Pure obsidian rounded-square base -->
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="#050505" />
+
+  <!-- Centered 4-pointed star (crisp off-white color block) -->
+  <path
+    d="M 256 64 Q 256 256 448 256 Q 256 256 256 448 Q 256 256 64 256 Q 256 256 256 64 Z"
+    fill="#f4f4f5"
+  />
+
+  <!-- Centered Crimson 4-pointed star core -->
+  <path
+    d="M 256 170 Q 256 256 342 256 Q 256 256 256 342 Q 256 256 170 256 Q 256 256 256 170 Z"
+    fill="#dc143c"
+  />
+</svg>

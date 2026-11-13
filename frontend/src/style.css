@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'UnifontJP';
+  src: url('/fonts/unifont_jp.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+  --font-primary: 'UnifontJP', monospace, sans-serif;
+  --crimson: #dc143c;
+  --crimson-hover: #e11d48;
+  --crimson-light: #f43f5e;
+  --crimson-dim: rgba(220, 20, 60, 0.15);
+  --crimson-glow: rgba(220, 20, 60, 0.35);
+}
+
+* {
+  font-family: 'UnifontJP', monospace, sans-serif !important;
+}
+
+body {
+  background-color: #050505;
+  color: #e5e5e5;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+}
+
+/* 星图模式锁定根视口，彻底消除 iOS PWA 橡皮筋回弹 */
+html.cluster-lock,
+html.cluster-lock body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* 移动端 iOS 状态栏安全边距 */
+.safe-pb {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+.safe-pt {
+  padding-top: env(safe-area-inset-top, 16px);
+}
+
+/* 针对 iOS PWA black-translucent 模式灵动岛及顶部系统模糊带额外留出缓冲空间 */
+.pwa-safe-top {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 1.25rem);
+}
+
+/* 极简精致滚动条 */
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #dc143c;
+}
+
+/* 隐藏横向滚动条类 */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 文本选择高亮 (Crimson 风格) */
+::selection {
+  background-color: #dc143c;
+  color: #ffffff;
+}
