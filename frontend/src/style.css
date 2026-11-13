@@ -8,6 +8,14 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'PoZhenTypewriter';
+  src: url('/fonts/迫真打字油印體.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
   --font-primary: 'UnifontJP', monospace, sans-serif;

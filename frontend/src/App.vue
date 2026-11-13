@@ -1,7 +1,7 @@
 <template>
   <div
     class="bg-[#050505] text-zinc-100 flex flex-col justify-between selection:bg-[#dc143c] selection:text-white relative"
-    :class="activeTab === 'cluster' ? 'h-[100dvh] overflow-hidden overscroll-none' : 'min-h-screen'"
+    :class="(activeTab === 'cluster' || activeTab === 'book') ? 'h-[100dvh] overflow-hidden overscroll-none' : 'min-h-screen'"
   >
     <!-- 全局 Toast 提示通知 (Crimson 风格，置于所有全屏浮层之上) -->
     <div class="fixed top-5 left-0 right-0 z-[100] flex justify-center pointer-events-none">
@@ -46,7 +46,7 @@
     <!-- 主内容区：全宽展开，无缝贴合 -->
     <main
       class="flex-1 w-full"
-      :class="activeTab === 'cluster' ? 'min-h-0 px-3 sm:px-8 py-3 sm:py-4 flex flex-col overflow-hidden' : 'px-4 sm:px-8 py-5 space-y-4'"
+      :class="(activeTab === 'cluster' || activeTab === 'book') ? 'min-h-0 px-3 sm:px-8 py-3 sm:py-4 flex flex-col overflow-hidden' : 'px-4 sm:px-8 py-5 space-y-4'"
     >
       <!-- 搜索状态提示条 (Crimson 风格) -->
       <div v-if="isSearchMode" class="flex items-center justify-between p-3 bg-[#0d0a0b] border border-[#dc143c]/30 rounded-xs text-xs">
@@ -98,6 +98,19 @@
           :processing-ids="processingIds"
           :highlight-terms="searchHighlightTerms"
           @select-diary="handleSelectDiary"
+        />
+      </div>
+
+      <!-- 仿真日记本模式 -->
+      <div v-if="activeTab === 'book'" class="flex-1 min-h-0 w-full flex flex-col">
+        <NotebookView
+          ref="notebookRef"
+          :items="isSearchMode ? searchResults : diaries"
+          :loading="loading"
+          :processing-ids="processingIds"
+          :highlight-terms="searchHighlightTerms"
+          @select-diary="handleSelectDiary"
+          @create-diary="openComposer()"
         />
       </div>
 
@@ -163,6 +176,7 @@ import { Plus, Menu } from '@lucide/vue'
 import HeaderSearch from './components/HeaderSearch.vue'
 import WeeklyTracker from './components/WeeklyTracker.vue'
 import TimelineView from './components/TimelineView.vue'
+import NotebookView from './components/NotebookView.vue'
 import ClusterView from './components/ClusterView.vue'
 import SideMenu from './components/SideMenu.vue'
 import DiaryComposerView from './components/DiaryComposerView.vue'
@@ -173,7 +187,7 @@ import { diaryApi } from './api/diary'
 const activeTab = ref('timeline')
 
 watch(activeTab, (tab) => {
-  if (tab === 'cluster') {
+  if (tab === 'cluster' || tab === 'book') {
     window.scrollTo(0, 0)
     document.documentElement.classList.add('cluster-lock')
   } else {
@@ -195,6 +209,7 @@ const isSearchMode = ref(false)
 const currentQuery = ref('')
 const processingIds = reactive(new Set())
 const timelineRef = ref(null)
+const notebookRef = ref(null)
 
 const relatedExpandedList = computed(() => {
   const q = currentQuery.value.trim().toLowerCase()
@@ -248,6 +263,10 @@ const handleOpenDiaryById = async (id) => {
 }
 
 const handleJumpToDate = (dateStr) => {
+  if (activeTab.value === 'book' && notebookRef.value) {
+    notebookRef.value.jumpToDate(dateStr)
+    return
+  }
   activeTab.value = 'timeline'
   if (timelineRef.value) {
     timelineRef.value.scrollToDate(dateStr)
@@ -255,10 +274,18 @@ const handleJumpToDate = (dateStr) => {
 }
 
 const handleScrollToTop = () => {
+  if (activeTab.value === 'book' && notebookRef.value) {
+    notebookRef.value.jumpToFirst()
+    return
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 const handleScrollToOldest = () => {
+  if (activeTab.value === 'book' && notebookRef.value) {
+    notebookRef.value.jumpToLast()
+    return
+  }
   if (timelineRef.value) {
     timelineRef.value.scrollToOldest()
   }

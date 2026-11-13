@@ -37,25 +37,35 @@
             <span><span class="text-[#dc143c] mr-1">✧</span>视图</span>
             <span class="text-[10px] text-zinc-600">VIEW</span>
           </div>
-          <div class="grid grid-cols-2 gap-2 bg-[#0c0c10] p-1 border border-[#1a1a20] rounded-xs">
+          <div class="grid grid-cols-3 gap-1.5 bg-[#0c0c10] p-1 border border-[#1a1a20] rounded-xs">
             <button
               @click="$emit('change-tab', 'timeline')"
-              class="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-xs transition-all cursor-pointer text-xs"
+              class="flex items-center justify-center space-x-1 py-2 px-1.5 rounded-xs transition-all cursor-pointer text-xs"
               :class="activeTab === 'timeline'
                 ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/50 font-medium'
                 : 'text-zinc-400 hover:text-zinc-200 border border-transparent'"
             >
-              <Clock class="w-3.5 h-3.5" />
-              <span>时间轴</span>
+              <List class="w-3.5 h-3.5 shrink-0" />
+              <span>列表</span>
+            </button>
+            <button
+              @click="$emit('change-tab', 'book')"
+              class="flex items-center justify-center space-x-1 py-2 px-1.5 rounded-xs transition-all cursor-pointer text-xs"
+              :class="activeTab === 'book'
+                ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/50 font-medium'
+                : 'text-zinc-400 hover:text-zinc-200 border border-transparent'"
+            >
+              <BookOpen class="w-3.5 h-3.5 shrink-0" />
+              <span>仿真</span>
             </button>
             <button
               @click="$emit('change-tab', 'cluster')"
-              class="flex items-center justify-center space-x-1.5 py-2 px-2 rounded-xs transition-all cursor-pointer text-xs"
+              class="flex items-center justify-center space-x-1 py-2 px-1.5 rounded-xs transition-all cursor-pointer text-xs"
               :class="activeTab === 'cluster'
                 ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/50 font-medium'
                 : 'text-zinc-400 hover:text-zinc-200 border border-transparent'"
             >
-              <Boxes class="w-3.5 h-3.5" />
+              <Boxes class="w-3.5 h-3.5 shrink-0" />
               <span>星图</span>
             </button>
           </div>
@@ -231,7 +241,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import {
-  X, Clock, Boxes, ChevronLeft, ChevronRight,
+  X, List, BookOpen, Boxes, ChevronLeft, ChevronRight,
   ArrowUp, ArrowDown, Sparkles, Download, Upload, FileText
 } from '@lucide/vue'
 
