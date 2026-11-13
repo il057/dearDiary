@@ -15,39 +15,40 @@ def vector_to_hex_color(vector: List[float]) -> str:
     if not vector or len(vector) < 100:
         return "#dc143c"
 
-    chunk_len = len(vector) // 3
-    c1 = sum(vector[0:chunk_len])
-    c2 = sum(vector[chunk_len:chunk_len*2])
-    c3 = sum(vector[chunk_len*2:chunk_len*3])
+    # 使用正交零均值投影消除句向量公共偏置，使不同语义的角分布均匀铺满 360° 色相环
+    x = sum(v if i % 2 == 0 else -v for i, v in enumerate(vector))
+    y = sum(v if (i // 2) % 2 == 0 else -v for i, v in enumerate(vector))
+    z = sum(v if (i // 4) % 2 == 0 else -v for i, v in enumerate(vector))
+    w = sum(v if (i // 8) % 2 == 0 else -v for i, v in enumerate(vector))
 
-    # 归一化角度 t ∈ [0, 1)
-    angle = math.atan2(c2, c1)
+    angle = math.atan2(y, x)
     t = (angle + math.pi) / (2 * math.pi)
 
-    # 映射到以 Crimson 绯红为主导、辅以暗琥珀/暮紫/冷钢灰的收敛电影暗调色域
-    if t < 0.55:
-        # 55% 概率落入 Crimson / 玫瑰红 / 珊瑚暗红 (Hue 340° ~ 372°)
-        local_t = t / 0.55
-        hue = (340 + local_t * 32) % 360
-        sat = 65 + 10 * math.sin(local_t * math.pi)
-    elif t < 0.70:
-        # 15% 落入 暗铜金 / 琥珀暖调 (Hue 12° ~ 32°)
-        local_t = (t - 0.55) / 0.15
-        hue = 12 + local_t * 20
-        sat = 52 - local_t * 10
-    elif t < 0.85:
-        # 15% 落入 烟熏冷灰蓝 / 暮色靛 (Hue 215° ~ 245°)
-        local_t = (t - 0.70) / 0.15
-        hue = 215 + local_t * 30
-        sat = 32 + 8 * math.sin(local_t * math.pi)
+    # 围绕主点缀色 Crimson (#dc143c) 构建的暗调电影感色域（无刺眼绿/黄绿），兼顾整体统一与节点区分度
+    if t < 0.35:
+        # 35% 绯红 / 猩红 / 玫瑰红 (Hue 342° ~ 8°)
+        local_t = t / 0.35
+        hue = (342 + local_t * 26) % 360
+        sat = 74 + 12 * math.tanh(w * 2.0)
+        light = 52 + 10 * math.tanh(z * 2.0)
+    elif t < 0.55:
+        # 20% 铁锈红 / 焦糖铜 / 暗琥珀 (Hue 12° ~ 34°)
+        local_t = (t - 0.35) / 0.20
+        hue = 12 + local_t * 22
+        sat = 64 + 12 * math.tanh(w * 2.0)
+        light = 53 + 9 * math.tanh(z * 2.0)
+    elif t < 0.78:
+        # 23% 梅子暗紫 / 勃艮第酒红 / 暮紫 (Hue 278° ~ 332°)
+        local_t = (t - 0.55) / 0.23
+        hue = 278 + local_t * 54
+        sat = 50 + 16 * math.tanh(w * 2.0)
+        light = 54 + 10 * math.tanh(z * 2.0)
     else:
-        # 15% 落入 梅子暗紫 -> 回归 Crimson (Hue 285° ~ 340°)
-        local_t = (t - 0.85) / 0.15
-        hue = 285 + local_t * 55
-        sat = 42 + local_t * 23
-
-    # 利用第三段向量微调明度，保持暗调高级感 (48% ~ 60%)
-    light = 54 + 6 * math.tanh(c3 * 0.5)
+        # 22% 烟熏冷钢蓝 / 暗银灰蓝 (Hue 210° ~ 242°，低饱和冷调作冷暖对比)
+        local_t = (t - 0.78) / 0.22
+        hue = 210 + local_t * 32
+        sat = 28 + 14 * math.tanh(w * 2.0)
+        light = 56 + 11 * math.tanh(z * 2.0)
 
     h = hue / 360.0
     s = sat / 100.0
@@ -88,6 +89,28 @@ class MemoryEngine:
         if commit:
             db.commit()
         return color
+
+    def recolor_all_diaries(self, db: Session) -> int:
+        """使用最新色域算法批量重算所有日记的 mood_color（优先复用 LanceDB 缓存向量）"""
+        cached_vectors = {}
+        try:
+            tbl_data = vector_store.table.to_arrow()
+            for did, vec in zip(tbl_data["diary_id"].to_pylist(), tbl_data["vector"].to_pylist()):
+                cached_vectors[did] = vec
+        except Exception:
+            pass
+
+        diaries = db.query(Diary).all()
+        updated = 0
+        for d in diaries:
+            vec = cached_vectors.get(d.id) or llm_service.get_embedding(d.content[:100])
+            new_color = vector_to_hex_color(vec)
+            if d.mood_color != new_color:
+                d.mood_color = new_color
+                updated += 1
+        if updated > 0:
+            db.commit()
+        return updated
 
     def create_diary_immediate(self, db: Session, content: str, created_at: Optional[datetime.datetime] = None) -> Diary:
         lines = [line.strip() for line in content.splitlines() if line.strip()]

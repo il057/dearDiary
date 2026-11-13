@@ -12,7 +12,7 @@
         </button>
 
         <div class="flex items-center space-x-2">
-          <span class="w-1.5 h-1.5 bg-[#dc143c]"></span>
+          <span class="text-[#dc143c] text-xs leading-none">✦</span>
           <span class="text-xs font-semibold text-zinc-200">
             {{ isEditing ? '编辑日记记忆' : '日记全貌' }}
           </span>
@@ -100,14 +100,13 @@
         <!-- 头部元数据条 -->
         <div class="flex items-center justify-between pb-4 border-b border-[#18181f] text-xs text-zinc-400 select-none">
           <div class="flex items-center space-x-3">
-            <!-- 情绪圆点 -->
+            <!-- 情绪星标 -->
             <span
-              class="w-2.5 h-2.5 rounded-full"
+              class="text-sm leading-none"
               :style="{
-                backgroundColor: diary.mood_color || '#dc143c',
-                boxShadow: `0 0 8px ${diary.mood_color || '#dc143c'}`
+                color: diary.mood_color || '#dc143c'
               }"
-            ></span>
+            >✦</span>
 
             <!-- 心情标签 -->
             <span v-if="diary.mood" class="px-2 py-0.5 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/40 rounded-xs text-[11px]">

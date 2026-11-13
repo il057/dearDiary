@@ -17,7 +17,7 @@
       <!-- 顶栏：适配 iOS PWA 灵动岛及状态栏安全区 -->
       <div class="flex items-center justify-between px-4 pb-3.5 pwa-safe-top border-b border-[#18181d] shrink-0">
         <div class="flex items-center space-x-2">
-          <span class="w-1.5 h-1.5 bg-[#dc143c]"></span>
+          <span class="text-[#dc143c] text-xs leading-none">✦</span>
           <span class="text-xs font-semibold text-zinc-100 uppercase tracking-widest">导览与日历</span>
         </div>
         <button
@@ -34,7 +34,7 @@
         <!-- 1. 浏览模式切换 -->
         <div class="space-y-2">
           <div class="text-[11px] text-zinc-500 font-mono uppercase tracking-wider flex items-center justify-between">
-            <span>浏览模式</span>
+            <span><span class="text-[#dc143c] mr-1">✧</span>浏览模式</span>
             <span class="text-[10px] text-zinc-600">VIEW MODE</span>
           </div>
           <div class="grid grid-cols-2 gap-2 bg-[#0c0c10] p-1 border border-[#1a1a20] rounded-xs">
@@ -64,7 +64,7 @@
         <!-- 2. 日历与时光穿梭 -->
         <div class="space-y-3">
           <div class="text-[11px] text-zinc-500 font-mono uppercase tracking-wider flex items-center justify-between">
-            <span>时光日历</span>
+            <span><span class="text-[#dc143c] mr-1">✧</span>时光日历</span>
             <span class="text-[10px] text-zinc-600">CALENDAR</span>
           </div>
 
@@ -122,8 +122,8 @@
                 <span>{{ day.dayNum }}</span>
                 <span
                   v-if="day.hasDiary"
-                  class="absolute bottom-0.5 w-1 h-1 rounded-full bg-[#dc143c]"
-                ></span>
+                  class="absolute bottom-0 text-[7px] leading-none text-[#dc143c]"
+                >✦</span>
               </div>
             </div>
           </div>
@@ -163,7 +163,7 @@
         <!-- 3. 认知记忆管理 -->
         <div class="space-y-2 pt-3 border-t border-[#18181d]">
           <div class="text-[11px] text-zinc-500 font-mono uppercase tracking-wider flex items-center justify-between">
-            <span>记忆系统</span>
+            <span><span class="text-[#dc143c] mr-1">✧</span>记忆系统</span>
             <span class="text-[10px] text-zinc-600">SYSTEM</span>
           </div>
 
@@ -219,9 +219,10 @@
         </div>
       </div>
 
-      <!-- 底栏安全区与标语 -->
-      <div class="px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] border-t border-[#18181d] text-center text-[10px] text-zinc-600 font-mono">
-        dearDiary · 私人语义记忆
+      <!-- 底栏安全区与 ASCII 星图签名 -->
+      <div class="px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] border-t border-[#18181d] text-center font-mono select-none space-y-1">
+        <pre class="text-[10px] leading-tight text-zinc-600 tracking-widest">✧ ˚｡✧  <span class="text-[#dc143c]">✦</span>  ✧｡˚ ✧</pre>
+        <div class="text-[10px] text-zinc-600">dearDiary · 私人语义记忆</div>
       </div>
     </div>
   </div>

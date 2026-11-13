@@ -3,7 +3,7 @@
     <!-- 极简顶部元数据行 -->
     <div class="flex items-center justify-between mb-3 text-[11px] font-mono">
       <div class="flex items-center space-x-2 text-zinc-400">
-        <span class="w-1.5 h-1.5 bg-[#dc143c]"></span>
+        <span class="text-[#dc143c] text-xs leading-none">✦</span>
         <span class="tracking-wider">近七日足迹</span>
         <span class="text-zinc-600 hidden sm:inline">· {{ weekRangeText }}</span>
       </div>
@@ -11,7 +11,7 @@
       <div class="text-zinc-500">
         <span>已录 </span>
         <span class="text-[#f43f5e]">{{ writtenDaysCount }}</span>
-        <span class="text-zinc-600"> / 7</span>
+        <span class="text-zinc-600"> / 7 ✧</span>
       </div>
     </div>
 
@@ -36,23 +36,23 @@
           {{ day.isToday ? '今日' : day.dayOfWeek }}
         </span>
 
-        <!-- 时间线节点圆点 -->
-        <div class="relative flex items-center justify-center w-4 h-4 bg-[#050505]">
-          <!-- 有日记：实心发光绯红点 -->
+        <!-- 时间线星点节点 -->
+        <div class="relative flex items-center justify-center w-5 h-5 bg-[#050505]">
+          <!-- 有日记：绯红实心星 ✦ -->
           <span
             v-if="day.hasDiary"
-            class="w-2 h-2 rounded-full bg-[#dc143c] shadow-[0_0_8px_rgba(220,20,60,0.85)] group-hover:scale-125 transition-transform"
-          ></span>
-          <!-- 今日未写：绯红空心脉冲环 -->
+            class="text-[#dc143c] text-sm leading-none group-hover:scale-125 transition-transform"
+          >✦</span>
+          <!-- 今日未写：绯红空心星 ✧ -->
           <span
             v-else-if="day.isToday"
-            class="w-2 h-2 rounded-full border border-[#dc143c] bg-[#050505] animate-pulse group-hover:scale-125 transition-transform"
-          ></span>
-          <!-- 过往空白：低调暗点 -->
+            class="text-[#dc143c] text-sm leading-none animate-pulse group-hover:scale-125 transition-transform"
+          >✧</span>
+          <!-- 过往空白：低调暗星 ✧ -->
           <span
             v-else
-            class="w-1.5 h-1.5 rounded-full bg-[#22222c] group-hover:bg-zinc-500 transition-colors"
-          ></span>
+            class="text-zinc-700 text-xs leading-none group-hover:text-zinc-400 transition-colors"
+          >✧</span>
         </div>
 
         <!-- 日期数字 -->

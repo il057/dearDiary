@@ -8,9 +8,9 @@
       <Transition name="toast-slide">
         <div
           v-if="toastMessage"
-          class="flex items-center space-x-2 px-4 py-2 rounded-xs bg-[#0c0c0f]/95 text-zinc-100 border border-neutral-800 shadow-2xl backdrop-blur-md text-xs font-mono"
+          class="flex items-center space-x-2 px-4 py-2 rounded-xs bg-[#0c0c0f]/95 text-zinc-100 border border-[#24242c] backdrop-blur-md text-xs font-mono"
         >
-          <span class="w-1.5 h-1.5 rounded-full" :class="toastType === 'success' ? 'bg-[#dc143c] shadow-[0_0_6px_#dc143c]' : 'bg-amber-400'"></span>
+          <span class="text-xs leading-none" :class="toastType === 'success' ? 'text-[#dc143c]' : 'text-amber-400'">{{ toastType === 'success' ? '✦' : '✧' }}</span>
           <span>{{ toastMessage }}</span>
         </div>
       </Transition>
@@ -29,9 +29,10 @@
             <Menu class="w-4 h-4" />
           </button>
 
-          <div class="flex items-center space-x-1.5 cursor-pointer" @click="activeTab = 'timeline'">
-            <span class="w-2 h-2 bg-[#dc143c] shadow-[0_0_6px_#dc143c]"></span>
+          <div class="flex items-center space-x-1.5 cursor-pointer group" @click="activeTab = 'timeline'">
+            <span class="text-[#dc143c] text-sm leading-none group-hover:scale-110 transition-transform">✦</span>
             <h1 class="text-sm sm:text-base font-semibold tracking-wider text-white font-mono uppercase">dearDiary</h1>
+            <span class="text-zinc-600 text-xs leading-none hidden sm:inline">✧</span>
           </div>
         </div>
 
@@ -50,6 +51,7 @@
       <!-- 搜索状态提示条 (Crimson 风格) -->
       <div v-if="isSearchMode" class="flex items-center justify-between p-3 bg-[#0d0a0b] border border-[#dc143c]/30 rounded-xs text-xs">
         <div class="flex items-center space-x-2 text-zinc-300 flex-wrap gap-y-1">
+          <span class="text-[#dc143c] text-xs leading-none">✦</span>
           <span class="text-zinc-500">语义检索:</span>
           <span class="font-medium text-[#f43f5e]">"{{ currentQuery }}"</span>
           <span v-if="expandedList.length" class="text-zinc-500">
@@ -84,8 +86,8 @@
             </span>
           </div>
           <div class="flex items-center space-x-2">
-            <span class="text-[10px] text-zinc-600 font-mono hidden sm:inline">新页面专注撰写</span>
-            <span class="text-[#dc143c] text-xs font-mono">写日记 ➔</span>
+            <span class="text-[10px] text-zinc-600 font-mono hidden sm:inline">✧ 新页面专注撰写</span>
+            <span class="text-[#dc143c] text-xs font-mono">✦ 写日记 ➔</span>
           </div>
         </div>
 

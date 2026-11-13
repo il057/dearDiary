@@ -8,7 +8,7 @@
     <!-- 左上角极简星图 HUD 与高频实体快捷滤镜 -->
     <div v-if="!loading && nodeCount > 0" class="absolute top-3 left-3 right-16 z-20 flex flex-col gap-2 pointer-events-none">
       <div class="inline-flex items-center space-x-2 text-[11px] font-mono text-zinc-400 bg-[#08080a]/85 backdrop-blur-md border border-[#1c1c24] px-2.5 py-1 rounded-xs w-fit pointer-events-auto">
-        <span class="w-1.5 h-1.5 bg-[#dc143c] shadow-[0_0_6px_#dc143c]"></span>
+        <span class="text-[#dc143c] text-xs leading-none">✦</span>
         <span>星图记忆: <strong class="text-zinc-200">{{ nodeCount }}</strong></span>
         <span class="text-zinc-600">·</span>
         <span>引力连线: <strong class="text-zinc-200">{{ linkCount }}</strong></span>
@@ -56,12 +56,11 @@
         <div class="flex items-center justify-between pb-2 border-b border-[#16161c] text-xs text-zinc-400">
           <div class="flex items-center space-x-2 flex-wrap gap-y-1">
             <span
-              class="w-2.5 h-2.5 rounded-full"
+              class="text-xs leading-none"
               :style="{
-                backgroundColor: selectedNode.color || '#dc143c',
-                boxShadow: `0 0 8px ${selectedNode.color || '#dc143c'}`
+                color: selectedNode.color || '#dc143c'
               }"
-            ></span>
+            >✦</span>
             <span class="font-mono text-zinc-300">{{ selectedNode.created_at }}</span>
             <span v-if="selectedNode.mood" class="px-1.5 py-0.5 bg-[#180a0e] border border-[#dc143c]/30 text-[#f43f5e] rounded-xs text-[10px]">
               {{ selectedNode.mood }}
@@ -109,8 +108,12 @@
     </Transition>
 
     <!-- 加载指示 -->
-    <div v-if="loading" class="absolute inset-0 flex flex-col items-center justify-center bg-[#050505]/80 backdrop-blur-xs space-y-2 text-xs text-zinc-500 font-mono">
-      <span class="w-2 h-2 bg-[#dc143c] animate-ping"></span>
+    <div v-if="loading" class="absolute inset-0 flex flex-col items-center justify-center bg-[#050505]/80 backdrop-blur-xs space-y-2.5 text-xs text-zinc-500 font-mono">
+      <div class="flex items-center space-x-2 text-xs">
+        <span class="text-zinc-700">✧</span>
+        <span class="text-[#dc143c] animate-pulse">✦</span>
+        <span class="text-zinc-700">✧</span>
+      </div>
       <span>正在构建记忆星图...</span>
     </div>
   </div>

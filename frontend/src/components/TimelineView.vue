@@ -6,7 +6,7 @@
       class="w-full bg-[#09090c] border border-[#1a1a20] rounded-xs p-2.5 flex items-center justify-between gap-3 text-xs select-none"
     >
       <div class="flex items-center space-x-2 shrink-0">
-        <span class="w-1.5 h-1.5 bg-[#dc143c]"></span>
+        <span class="text-[#dc143c] text-xs leading-none">✦</span>
         <span class="text-zinc-400 font-medium font-mono text-[11px]">年份索引</span>
       </div>
 
@@ -46,17 +46,22 @@
     </div>
 
     <!-- 加载中动画 -->
-    <div v-if="loading" class="py-24 text-center text-zinc-500 text-xs animate-pulse font-mono flex flex-col items-center justify-center space-y-2">
-      <span class="w-2 h-2 bg-[#dc143c] animate-ping"></span>
+    <div v-if="loading" class="py-24 text-center text-zinc-500 text-xs font-mono flex flex-col items-center justify-center space-y-2.5 select-none">
+      <div class="flex items-center space-x-2 text-xs">
+        <span class="text-zinc-600">✧</span>
+        <span class="text-[#dc143c] animate-pulse">✦</span>
+        <span class="text-zinc-600">✧</span>
+      </div>
       <span>正在穿梭记忆时间轴...</span>
     </div>
 
-    <!-- 空数据提示 -->
-    <div v-else-if="items.length === 0" class="py-24 text-center select-none">
-      <div class="inline-flex p-3 rounded-xs bg-[#0c0c0f] border border-[#1c1c22] text-zinc-500 mb-3">
-        <BookOpen class="w-5 h-5 text-[#dc143c]" />
-      </div>
-      <p class="text-zinc-500 text-xs">空空如也，随时记录下今日的第一条随想吧</p>
+    <!-- 空数据提示 (ASCII 星图艺术) -->
+    <div v-else-if="items.length === 0" class="py-20 text-center select-none flex flex-col items-center justify-center space-y-4">
+      <pre class="text-[11px] leading-relaxed font-mono text-zinc-700">    .   *   ˚   .
+  *   <span class="text-[#dc143c]">✦</span>   .   ✧
+    ˚   ✧   *   .
+  ✧   .   <span class="text-[#dc143c]">✦</span>   *</pre>
+      <p class="text-zinc-500 text-xs font-mono">✧ 空空如也，随时记录下今日的第一条随想吧 ✧</p>
     </div>
 
     <!-- 垂直时间线轴 + 按年月分组的有序卡片流 -->
@@ -69,15 +74,15 @@
       >
         <!-- 年/月切换提醒节点：直接锚定在左侧时间轴线上 -->
         <div class="flex items-center space-x-3 mb-3.5 select-none">
-          <!-- 时间线上的节点标志：跨年为实心高亮 Crimson 方块，跨月为精致空心红点 -->
+          <!-- 时间线上的星点标志：跨年为高亮 Crimson 实心星 ✦，跨月为空心星 ✧ -->
           <span
             v-if="group.isNewYear"
-            class="absolute -left-[21px] sm:-left-[33px] w-2.5 h-2.5 bg-[#dc143c] shadow-[0_0_8px_rgba(220,20,60,0.8)]"
-          ></span>
+            class="absolute -left-[22px] sm:-left-[34px] text-[#dc143c] text-xs leading-none bg-[#050505] py-0.5"
+          >✦</span>
           <span
             v-else
-            class="absolute -left-[20px] sm:-left-[32px] w-2 h-2 rounded-full bg-[#050505] border border-[#dc143c]/80"
-          ></span>
+            class="absolute -left-[22px] sm:-left-[34px] text-[#dc143c]/80 text-xs leading-none bg-[#050505] py-0.5"
+          >✧</span>
 
           <!-- 年份 & 月份提醒标签 -->
           <div class="flex items-baseline space-x-2">
@@ -117,16 +122,15 @@
             ]"
           >
             <div>
-              <!-- 卡片头部：微光点、具体日期时间、心境 -->
+              <!-- 卡片头部：星标情绪色、具体日期时间、心境 -->
               <div class="flex items-center justify-between text-xs text-zinc-500 mb-2 pb-1.5 border-b border-[#141418]">
                 <div class="flex items-center space-x-2">
                   <span
-                    class="w-2 h-2 rounded-full shrink-0"
+                    class="text-xs leading-none shrink-0"
                     :style="{
-                      backgroundColor: item.mood_color || '#dc143c',
-                      boxShadow: `0 0 6px ${item.mood_color || '#dc143c'}60`
+                      color: item.mood_color || '#dc143c'
                     }"
-                  ></span>
+                  >✦</span>
                   <span class="font-mono text-zinc-400 text-[11px]">
                     {{ formatCardTime(item.created_at) }}
                   </span>
@@ -136,13 +140,13 @@
                   <span v-if="item.mood" class="px-1.5 py-0.5 bg-[#16090c] text-[#f43f5e] border border-[#dc143c]/25 rounded-xs text-[10px]">
                     {{ item.mood }}
                   </span>
-                  <span v-if="processingIds.has(item.id || item.diary_id)" class="w-1.5 h-1.5 rounded-full bg-[#dc143c] animate-pulse"></span>
+                  <span v-if="processingIds.has(item.id || item.diary_id)" class="text-[#dc143c] text-[10px] leading-none animate-pulse">✧</span>
                 </div>
               </div>
 
               <!-- 语义检索命中指示 (如有) -->
               <div v-if="item.matched_reason" class="mb-2 text-[10px] text-[#f43f5e] bg-[#16090c] px-1.5 py-0.5 rounded-xs border border-[#dc143c]/20 inline-flex items-center space-x-1">
-                <Sparkles class="w-3 h-3 text-[#dc143c]" />
+                <span class="text-[#dc143c] text-[10px] leading-none">✦</span>
                 <span class="truncate">{{ item.matched_reason }}</span>
               </div>
 
@@ -194,7 +198,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { BookOpen, Sparkles, ArrowUp } from '@lucide/vue'
+import { ArrowUp } from '@lucide/vue'
 
 const props = defineProps({
   items: {

@@ -15,7 +15,7 @@
         </button>
 
         <div class="flex items-center space-x-2">
-          <span class="w-1.5 h-1.5 bg-[#dc143c]"></span>
+          <span class="text-[#dc143c] text-xs leading-none">✦</span>
           <h3 class="text-xs sm:text-sm font-semibold text-zinc-100 tracking-wider">认知词典与实体管理</h3>
         </div>
       </div>
@@ -36,7 +36,7 @@
           <div class="bg-[#09090c] border border-[#1a1a20] rounded-xs p-4 space-y-4">
             <div class="pb-2.5 border-b border-[#15151a]">
               <div class="flex items-center space-x-2">
-                <Sparkles class="w-3.5 h-3.5 text-[#dc143c]" />
+                <span class="text-[#dc143c] text-xs leading-none">✧</span>
                 <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">实体别名归一</h4>
               </div>
               <p class="text-[11px] text-zinc-500 mt-1">将昵称、英文名或简称归并到同一个主实体</p>
@@ -106,7 +106,7 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#15151a]">
               <div>
                 <h4 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">
-                  全局实体标签库 ({{ filteredEntities.length }})
+                  <span class="text-[#dc143c] mr-1.5">✧</span>全局实体标签库 ({{ filteredEntities.length }})
                 </h4>
                 <p class="text-[11px] text-zinc-500 mt-0.5">点击右侧分类按钮实时切换类型；删除将同步移除日记中的关联标签</p>
               </div>

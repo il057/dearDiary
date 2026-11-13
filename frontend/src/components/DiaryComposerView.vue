@@ -12,7 +12,7 @@
         </button>
 
         <div class="flex items-center space-x-2">
-          <span class="w-1.5 h-1.5 bg-[#dc143c]"></span>
+          <span class="text-[#dc143c] text-xs leading-none">✦</span>
           <span class="text-xs font-semibold text-zinc-200">
             {{ isBackfillMode ? '补档往昔日记' : '记录新日记' }}
           </span>
@@ -109,7 +109,7 @@
 
     <!-- 底栏快捷提示 -->
     <footer class="px-4 sm:px-8 pt-2.5 pb-[max(env(safe-area-inset-bottom),0.625rem)] border-t border-[#18181f] bg-[#08080a] flex items-center justify-between text-[11px] text-zinc-600 select-none font-mono">
-      <span>Ctrl + Enter 快捷保存 · ESC 退出</span>
+      <span><span class="text-[#dc143c] mr-1">✧</span>Ctrl + Enter 快捷保存 · ESC 退出</span>
       <span>{{ content.trim().length }} 字</span>
     </footer>
   </div>

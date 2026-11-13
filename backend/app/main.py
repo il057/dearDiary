@@ -103,6 +103,11 @@ def get_single_diary(diary_id: int, db: Session = Depends(get_db)):
         entities=[b.entity.name for b in diary.entities if b.entity]
     )
 
+@app.post("/api/diaries/recolor")
+def recolor_all_diaries(db: Session = Depends(get_db)):
+    updated = memory_engine.recolor_all_diaries(db)
+    return {"status": "success", "updated": updated}
+
 @app.post("/api/diaries/{diary_id}/reindex", response_model=DiaryOut)
 def reindex_single_diary(diary_id: int):
     res = memory_engine.process_single_diary_memory(diary_id)
