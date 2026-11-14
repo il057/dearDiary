@@ -606,7 +606,9 @@ const recomputePages = () => {
     // 若该日记有回响纸片且最后一页剩余空间不足，则追加一页以防纸片遮挡正文末尾文字
     if (diary.echoes && diary.echoes.length > 0 && chunks.length > 0) {
       el.textContent = chunks[chunks.length - 1]
-      if (maxH - el.scrollHeight < 120) {
+      const totalEchoChars = diary.echoes.reduce((sum, e) => sum + (e.content || '').length, 0)
+      const estimatedSlipHeight = diary.echoes.length === 1 && totalEchoChars <= 45 ? 96 : 168
+      if (maxH - el.scrollHeight < estimatedSlipHeight) {
         chunks.push('')
       }
     }

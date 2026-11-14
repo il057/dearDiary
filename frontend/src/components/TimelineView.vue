@@ -174,6 +174,23 @@
                 </template>
                 <template v-else>{{ item.content }}</template>
               </p>
+
+              <!-- 命中回响时的紧凑预览条 -->
+              <div
+                v-if="getMatchedEchoPreview(item)"
+                class="mt-2 px-2 py-1.5 bg-[#0e0b10] border border-[#241b22] border-l-2 border-l-[#dc143c]/65 rounded-xs text-[11px] text-zinc-300 flex items-start space-x-1.5"
+              >
+                <StickyNote class="w-3 h-3 text-[#dc143c] shrink-0 mt-0.5" />
+                <p class="line-clamp-2 leading-relaxed break-words">
+                  <template v-if="highlightTerms.length > 0">
+                    <template v-for="(seg, sIdx) in splitHighlightSegments(getMatchedEchoPreview(item).content, highlightTerms)" :key="sIdx">
+                      <mark v-if="seg.match" class="bg-[#dc143c]/30 text-[#fda4af] px-0.5 rounded-xs">{{ seg.text }}</mark>
+                      <template v-else>{{ seg.text }}</template>
+                    </template>
+                  </template>
+                  <template v-else>{{ getMatchedEchoPreview(item).content }}</template>
+                </p>
+              </div>
             </div>
 
             <!-- 底部语义实体标签栏 -->
@@ -394,5 +411,19 @@ const formatCardTime = (timeStr) => {
     return `${d.getMonth() + 1}月${d.getDate()}日`
   }
   return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+const getMatchedEchoPreview = (item) => {
+  const echoes = item?.echoes
+  if (!echoes || echoes.length === 0) return null
+  const terms = (props.highlightTerms || []).map(t => (t || '').trim().toLowerCase()).filter(Boolean)
+  if (terms.length > 0) {
+    const matched = echoes.find(e => terms.some(t => (e.content || '').toLowerCase().includes(t)))
+    if (matched) return matched
+  }
+  if (item.matched_reason && item.matched_reason.includes('回响命中')) {
+    return echoes[0]
+  }
+  return null
 }
 </script>

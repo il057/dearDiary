@@ -167,6 +167,18 @@
       @update-echoes="handleUpdateDiaryEchoes"
       @select-related="handleOpenDiaryById"
       @quote="handleQuoteDiary"
+      @toast="showToast"
+    />
+
+    <!-- 全局二次确认弹窗 -->
+    <ConfirmModal
+      :is-open="deleteConfirm.isOpen"
+      title="删除日记"
+      message="确定删除该条记忆吗？此操作将同时清除其关联的回响与向量索引，且无法恢复。"
+      confirm-text="确认删除"
+      :loading="deleteConfirm.loading"
+      @confirm="confirmDeleteDiary"
+      @cancel="cancelDeleteDiary"
     />
 
     <!-- 认知词典与别名对齐弹窗 -->
@@ -191,6 +203,7 @@ import ClusterView from './components/ClusterView.vue'
 import SideMenu from './components/SideMenu.vue'
 import DiaryComposerView from './components/DiaryComposerView.vue'
 import DiaryDetailView from './components/DiaryDetailView.vue'
+import ConfirmModal from './components/ConfirmModal.vue'
 import KnowledgeModal from './components/KnowledgeModal.vue'
 import AnalyticsView from './components/AnalyticsView.vue'
 import { diaryApi } from './api/diary'
@@ -453,8 +466,26 @@ const handleUpdateDiary = async (payload) => {
   }
 }
 
-const handleDeleteDiary = async (id) => {
-  if (!confirm('确定删除该条记忆吗？')) return
+const deleteConfirm = reactive({
+  isOpen: false,
+  diaryId: null,
+  loading: false
+})
+
+const handleDeleteDiary = (id) => {
+  deleteConfirm.diaryId = id
+  deleteConfirm.isOpen = true
+}
+
+const cancelDeleteDiary = () => {
+  deleteConfirm.isOpen = false
+  deleteConfirm.diaryId = null
+}
+
+const confirmDeleteDiary = async () => {
+  const id = deleteConfirm.diaryId
+  if (!id || deleteConfirm.loading) return
+  deleteConfirm.loading = true
   try {
     await diaryApi.deleteDiary(id)
     diaries.value = diaries.value
@@ -464,12 +495,17 @@ const handleDeleteDiary = async (id) => {
         quoted_diaries: (d.quoted_diaries || []).filter(q => q.id !== id),
         quoted_by: (d.quoted_by || []).filter(q => q.id !== id)
       }))
+    searchResults.value = searchResults.value.filter(d => (d.id || d.diary_id) !== id)
     if (selectedDiary.value && (selectedDiary.value.id || selectedDiary.value.diary_id) === id) {
       selectedDiary.value = null
     }
+    deleteConfirm.isOpen = false
+    deleteConfirm.diaryId = null
     showToast('已删除记录')
   } catch {
     showToast('删除失败', 'error')
+  } finally {
+    deleteConfirm.loading = false
   }
 }
 

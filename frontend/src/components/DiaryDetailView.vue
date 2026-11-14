@@ -456,6 +456,17 @@
         </div>
       </div>
     </main>
+
+    <!-- 删除回响二次确认弹窗 -->
+    <ConfirmModal
+      :is-open="echoDeleteConfirm.isOpen"
+      title="删除回响"
+      message="确定撕掉这条回响纸片吗？删除后无法恢复。"
+      confirm-text="确认删除"
+      :loading="echoDeleteConfirm.loading"
+      @confirm="confirmDeleteEcho"
+      @cancel="cancelDeleteEcho"
+    />
   </div>
 </template>
 
@@ -467,6 +478,7 @@ import {
 } from '@lucide/vue'
 import { splitHighlightSegments, isEntityHighlighted } from '../utils/highlight'
 import { diaryApi } from '../api/diary'
+import ConfirmModal from './ConfirmModal.vue'
 
 const props = defineProps({
   diary: {
@@ -484,7 +496,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits([
-  'close', 'update', 'delete', 'reindex', 'filter-tag', 'update-entities', 'update-echoes', 'select-related', 'quote'
+  'close', 'update', 'delete', 'reindex', 'filter-tag', 'update-entities', 'update-echoes', 'select-related', 'quote', 'toast'
 ])
 
 const isEditing = ref(false)
@@ -499,6 +511,11 @@ const newEchoInputRef = ref(null)
 const editingEchoId = ref(null)
 const editingEchoText = ref('')
 const echoSubmitting = ref(false)
+const echoDeleteConfirm = ref({
+  isOpen: false,
+  echoId: null,
+  loading: false
+})
 const relatedDiaries = ref([])
 const relatedLoading = ref(false)
 
@@ -554,6 +571,9 @@ const submitNewEcho = async () => {
     emit('update-echoes', { id: diaryId, echoes: nextEchoes })
     newEchoText.value = ''
     isAddingEcho.value = false
+    emit('toast', '已贴上回响')
+  } catch {
+    emit('toast', '添加回响失败，请稍后重试', 'error')
   } finally {
     echoSubmitting.value = false
   }
@@ -575,21 +595,44 @@ const saveEditEcho = async (echoId) => {
     emit('update-echoes', { id: diaryId, echoes: nextEchoes })
     editingEchoId.value = null
     editingEchoText.value = ''
+    emit('toast', '回响已更新')
+  } catch {
+    emit('toast', '更新回响失败，请稍后重试', 'error')
   } finally {
     echoSubmitting.value = false
   }
 }
 
-const handleDeleteEcho = async (echoId) => {
+const handleDeleteEcho = (echoId) => {
+  echoDeleteConfirm.value = {
+    isOpen: true,
+    echoId,
+    loading: false
+  }
+}
+
+const cancelDeleteEcho = () => {
+  echoDeleteConfirm.value = {
+    isOpen: false,
+    echoId: null,
+    loading: false
+  }
+}
+
+const confirmDeleteEcho = async () => {
   const diaryId = props.diary?.id || props.diary?.diary_id
-  if (!diaryId || echoSubmitting.value) return
-  echoSubmitting.value = true
+  const echoId = echoDeleteConfirm.value.echoId
+  if (!diaryId || !echoId || echoDeleteConfirm.value.loading) return
+  echoDeleteConfirm.value.loading = true
   try {
     await diaryApi.deleteEcho(echoId)
     const nextEchoes = (props.diary.echoes || []).filter(e => e.id !== echoId)
     emit('update-echoes', { id: diaryId, echoes: nextEchoes })
-  } finally {
-    echoSubmitting.value = false
+    cancelDeleteEcho()
+    emit('toast', '已删除回响')
+  } catch {
+    emit('toast', '删除回响失败，请稍后重试', 'error')
+    echoDeleteConfirm.value.loading = false
   }
 }
 
