@@ -143,7 +143,7 @@ class LLMClient:
 输出 Schema：
 {{
   "summary": "10-20字的一句话核心提炼，概括日记主要事件或感悟",
-  "mood": "2-4字心境情绪词（如：怀念、释怀、烦躁、平静、欣慰），无明显情绪则留空字符串 \"\"",
+  "mood": "必填，2-4字心境情绪或基调词（如：怀念、释怀、烦躁、平静、欣慰、充实、惬意、日常），严禁留空或输出“无”",
   "entities": [
     {{"name": "实体名", "entity_type": "person|pet|place|time|concept"}}
   ],
@@ -275,17 +275,21 @@ class LLMClient:
             if raw_summary and len(raw_summary) >= 2:
                 summary_str = raw_summary[:45]
 
-            raw_mood = str(parsed.get("mood") or "").strip()
+            raw_mood = str(parsed.get("mood") or "").strip(" \t\r\n\"'“”‘’。，、")
             bad_mood_set = {
                 "具体情绪词", "心境词", "情绪词", "心境", "情绪", "心情", "情绪词汇",
-                "情绪词或空字符串", "null", "none", "未知", "无", "具体", "情感", "状态", "无情绪"
+                "情绪词或空字符串", "null", "none", "未知", "无", "具体", "情感", "状态",
+                "无情绪", "无明显情绪", "没有明显情绪", "暂无"
             }
-            if raw_mood in bad_mood_set or any(b in raw_mood for b in ["心境词", "具体情绪词", "情绪词", "占位"]):
+            if raw_mood.lower() in bad_mood_set or any(b in raw_mood for b in ["心境词", "具体情绪词", "情绪词", "占位"]):
                 mood_str = ""
             elif len(raw_mood) > 6:
                 mood_str = raw_mood[:4]
             else:
                 mood_str = raw_mood
+
+            if not mood_str:
+                mood_str = "平静"
 
             stop_words = {
                 "你", "我", "他", "她", "它", "你们", "我们", "他们", "她们", "它们",
