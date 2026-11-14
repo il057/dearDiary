@@ -2,6 +2,8 @@ import time
 import math
 import re
 import datetime
+import threading
+import numpy as np
 from typing import List, Dict, Any, Set, Optional
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
@@ -85,6 +87,7 @@ def cosine_similarity(v1: List[float], v2: List[float]) -> float:
 class MemoryEngine:
     def __init__(self):
         self._graph_cache: Optional[GraphResponse] = None
+        self._graph_lock = threading.Lock()
 
     def invalidate_graph_cache(self):
         self._graph_cache = None
@@ -321,157 +324,177 @@ class MemoryEngine:
     def get_cluster_graph_2d(self, db: Session) -> GraphResponse:
         """
         记忆动力学混合聚类星系图：
-        1. 向量相似度 (Vector Distance)：反映日记行文、语言风格与隐式语义距离；
-        2. 共享实体引力 (Shared Entity Attraction)：当两篇日记共同提及特定实体（包括别名归一后的同义实体）、地点或核心话题时，产生强弹簧引力；
-        3. 心境共鸣 (Mood Resonance)：相同心境赋予轻微共鸣引力；
-        4. 真正形成如参考图所示的“围绕人物与核心事件的高度致密群落（Community Clusters）”。
+        1. 向量相似度 (Vector Distance)：使用内存矩阵乘法批量计算，避免循环检索 LanceDB 与同步阻塞请求 Ollama；
+        2. 共享实体引力 (Shared Entity Attraction)：当两篇日记共同提及特定实体、地点或核心话题时，产生强弹簧引力；
+        3. 心境共鸣 (Mood Resonance)：相同心境赋予轻微共鸣引力。
         """
         if self._graph_cache is not None:
             return self._graph_cache
 
-        diaries = (
-            db.query(Diary)
-            .options(joinedload(Diary.entities).joinedload(DiaryEntity.entity))
-            .all()
-        )
-        if not diaries:
-            return GraphResponse(nodes=[], links=[])
+        with self._graph_lock:
+            if self._graph_cache is not None:
+                return self._graph_cache
 
-        cached_vectors: Dict[int, List[float]] = {}
-        try:
-            tbl_data = vector_store.table.to_arrow()
-            diary_ids = tbl_data["diary_id"].to_pylist()
-            vectors = tbl_data["vector"].to_pylist()
-            for did, vec in zip(diary_ids, vectors):
-                if did not in cached_vectors:
-                    cached_vectors[did] = vec
-        except Exception:
-            pass
+            diaries = (
+                db.query(Diary)
+                .options(joinedload(Diary.entities).joinedload(DiaryEntity.entity))
+                .all()
+            )
+            if not diaries:
+                return GraphResponse(nodes=[], links=[])
 
-        all_items = []
-        diary_map: Dict[int, Diary] = {}
-        diary_entities_map: Dict[int, Set[str]] = {}
-        entity_to_diaries: Dict[str, Set[int]] = {}
-        color_backfilled = False
+            cached_vectors: Dict[int, List[float]] = {}
+            try:
+                tbl_data = vector_store.table.to_arrow()
+                diary_ids = tbl_data["diary_id"].to_pylist()
+                vectors = tbl_data["vector"].to_pylist()
+                for did, vec in zip(diary_ids, vectors):
+                    if did not in cached_vectors and vec:
+                        cached_vectors[did] = vec
+            except Exception:
+                pass
 
-        for d in diaries:
-            vec = cached_vectors.get(d.id) or llm_service.get_embedding(d.content[:200])
-            cached_vectors[d.id] = vec
-            if not d.mood_color and vec:
-                d.mood_color = vector_to_hex_color(vec)
-                color_backfilled = True
-            all_items.append(d)
-            diary_map[d.id] = d
-            ent_set = set(b.entity.name for b in d.entities if b.entity)
-            diary_entities_map[d.id] = ent_set
-            for ent_name in ent_set:
-                entity_to_diaries.setdefault(ent_name, set()).add(d.id)
+            all_items = []
+            diary_map: Dict[int, Diary] = {}
+            diary_entities_map: Dict[int, Set[str]] = {}
+            entity_to_diaries: Dict[str, Set[int]] = {}
+            color_backfilled = False
 
-        if color_backfilled:
-            db.commit()
+            for d in diaries:
+                vec = cached_vectors.get(d.id)
+                if not d.mood_color and vec:
+                    d.mood_color = vector_to_hex_color(vec)
+                    color_backfilled = True
+                all_items.append(d)
+                diary_map[d.id] = d
+                ent_set = set(b.entity.name for b in d.entities if b.entity)
+                diary_entities_map[d.id] = ent_set
+                for ent_name in ent_set:
+                    entity_to_diaries.setdefault(ent_name, set()).add(d.id)
 
-        use_ann = len(all_items) > 50 and len(vector_store.table) > 0
-        links: List[GraphLink] = []
-        node_degree: Dict[int, int] = {d.id: 0 for d in all_items}
-        existing_edges = set()
+            if color_backfilled:
+                db.commit()
 
-        # 优先加入显式引用关系边
-        for q in db.query(DiaryQuote).all():
-            if q.diary_id in diary_map and q.quoted_diary_id in diary_map and q.diary_id != q.quoted_diary_id:
-                pair = tuple(sorted([q.diary_id, q.quoted_diary_id]))
-                if pair not in existing_edges:
-                    existing_edges.add(pair)
-                    links.append(GraphLink(
-                        source=pair[0],
-                        target=pair[1],
-                        value=3.0,
-                        reason="引用关联"
-                    ))
-                    node_degree[pair[0]] += 1
-                    node_degree[pair[1]] += 1
+            # 内存向量矩阵批量计算余弦相似度，彻底消除循环内 N 次 LanceDB 磁盘检索
+            vec_ids = [d.id for d in all_items if cached_vectors.get(d.id)]
+            id_to_idx: Dict[int, int] = {did: idx for idx, did in enumerate(vec_ids)}
+            sim_matrix = None
+            if len(vec_ids) > 1:
+                mat = np.asarray([cached_vectors[did] for did in vec_ids], dtype=np.float32)
+                norms = np.linalg.norm(mat, axis=1, keepdims=True)
+                norms[norms == 0] = 1.0
+                mat_norm = mat / norms
+                sim_matrix = mat_norm @ mat_norm.T
 
-        for d1 in all_items:
-            v1 = cached_vectors[d1.id]
-            e1 = diary_entities_map.get(d1.id, set())
-            candidates = []
+            use_ann = len(all_items) > 50 and sim_matrix is not None
+            links: List[GraphLink] = []
+            node_degree: Dict[int, int] = {d.id: 0 for d in all_items}
+            existing_edges = set()
 
-            if use_ann:
-                cand_ids: Set[int] = set()
-                for ent_name in e1:
-                    cand_ids.update(entity_to_diaries.get(ent_name, set()))
-                for vm in vector_store.search_similar(v1, limit=16):
-                    vid = vm.get("diary_id")
-                    if vid is not None:
-                        cand_ids.add(vid)
-                cand_ids.discard(d1.id)
-                peer_items = [diary_map[cid] for cid in cand_ids if cid in diary_map]
-            else:
-                peer_items = [d2 for d2 in all_items if d2.id != d1.id]
+            # 优先加入显式引用关系边
+            for q in db.query(DiaryQuote).all():
+                if q.diary_id in diary_map and q.quoted_diary_id in diary_map and q.diary_id != q.quoted_diary_id:
+                    pair = tuple(sorted([q.diary_id, q.quoted_diary_id]))
+                    if pair not in existing_edges:
+                        existing_edges.add(pair)
+                        links.append(GraphLink(
+                            source=pair[0],
+                            target=pair[1],
+                            value=3.0,
+                            reason="引用关联"
+                        ))
+                        node_degree[pair[0]] += 1
+                        node_degree[pair[1]] += 1
 
-            for d2 in peer_items:
-                v2 = cached_vectors[d2.id]
-                e2 = diary_entities_map.get(d2.id, set())
+            for d1 in all_items:
+                e1 = diary_entities_map.get(d1.id, set())
+                idx1 = id_to_idx.get(d1.id)
+                candidates = []
 
-                cos_sim = cosine_similarity(v1, v2)
-                shared_ents = e1 & e2
-                shared_count = len(shared_ents)
-
-                # 混合打分公式：向量基础分 + 共享实体大幅加权 + 心境共鸣
-                if shared_count > 0:
-                    ent_ratio = shared_count / max(1, len(e1 | e2))
-                    mood_bonus = 0.08 if (d1.mood and d1.mood == d2.mood) else 0.0
-                    composite_sim = 0.45 * cos_sim + 0.45 * (0.6 + 0.4 * ent_ratio) + mood_bonus
-                    reason = f"共同提及: {'、'.join(list(shared_ents)[:3])}"
+                if use_ann:
+                    cand_ids: Set[int] = set()
+                    for ent_name in e1:
+                        cand_ids.update(entity_to_diaries.get(ent_name, set()))
+                    if idx1 is not None:
+                        sims = sim_matrix[idx1]
+                        top_k = min(17, len(vec_ids))
+                        top_indices = np.argpartition(sims, -top_k)[-top_k:]
+                        for tidx in top_indices:
+                            if tidx != idx1:
+                                cand_ids.add(vec_ids[int(tidx)])
+                    cand_ids.discard(d1.id)
+                    peer_items = [diary_map[cid] for cid in cand_ids if cid in diary_map]
                 else:
-                    mood_bonus = 0.04 if (d1.mood and d1.mood == d2.mood) else 0.0
-                    composite_sim = 0.9 * cos_sim + mood_bonus
-                    reason = "语义共鸣"
+                    peer_items = [d2 for d2 in all_items if d2.id != d1.id]
 
-                candidates.append((d2.id, composite_sim, reason, shared_count))
+                for d2 in peer_items:
+                    e2 = diary_entities_map.get(d2.id, set())
+                    idx2 = id_to_idx.get(d2.id)
+                    if sim_matrix is not None and idx1 is not None and idx2 is not None:
+                        cos_sim = float(sim_matrix[idx1, idx2])
+                    else:
+                        cos_sim = 0.0
 
-            # 优先连接共享实体的日记，再连接纯语义近邻
-            candidates.sort(key=lambda x: (x[3] > 0, x[1]), reverse=True)
+                    shared_ents = e1 & e2
+                    shared_count = len(shared_ents)
 
-            # 为每个节点保留最强前 3 条纽带
-            for target_id, sim, link_reason, sc in candidates[:3]:
-                pair = tuple(sorted([d1.id, target_id]))
-                threshold = 0.40 if sc > 0 else 0.46
-                if pair not in existing_edges and sim > threshold:
-                    existing_edges.add(pair)
-                    # 共享实体的连线给予更高的弹性张力
-                    link_val = round(sim * (2.8 if sc > 0 else 1.8), 2)
-                    links.append(GraphLink(
-                        source=pair[0],
-                        target=pair[1],
-                        value=link_val,
-                        reason=link_reason
-                    ))
-                    node_degree[pair[0]] += 1
-                    node_degree[pair[1]] += 1
+                    # 混合打分公式：向量基础分 + 共享实体大幅加权 + 心境共鸣
+                    if shared_count > 0:
+                        ent_ratio = shared_count / max(1, len(e1 | e2))
+                        mood_bonus = 0.08 if (d1.mood and d1.mood == d2.mood) else 0.0
+                        composite_sim = 0.45 * cos_sim + 0.45 * (0.6 + 0.4 * ent_ratio) + mood_bonus
+                        reason = f"共同提及: {'、'.join(list(shared_ents)[:3])}"
+                    else:
+                        mood_bonus = 0.04 if (d1.mood and d1.mood == d2.mood) else 0.0
+                        composite_sim = 0.9 * cos_sim + mood_bonus
+                        reason = "语义共鸣"
 
-        nodes: List[GraphNode] = []
-        for d in all_items:
-            deg = node_degree.get(d.id, 0)
-            ents = list(diary_entities_map.get(d.id, set()))
-            # 实体丰富的枢纽节点稍大一些，作为星系核心
-            node_size = round(max(5.0, min(16.0, 5.0 + deg * 1.5 + len(ents) * 0.8)), 1)
-            color = d.mood_color or vector_to_hex_color(cached_vectors[d.id])
-            title = d.summary if d.summary else d.content[:25]
+                    candidates.append((d2.id, composite_sim, reason, shared_count))
 
-            nodes.append(GraphNode(
-                id=d.id,
-                name=title,
-                color=color,
-                val=node_size,
-                content=d.content,
-                created_at=d.created_at.strftime("%Y-%m-%d"),
-                entities=ents,
-                mood=d.mood
-            ))
+                # 优先连接共享实体的日记，再连接纯语义近邻
+                candidates.sort(key=lambda x: (x[3] > 0, x[1]), reverse=True)
 
-        resp = GraphResponse(nodes=nodes, links=links)
-        self._graph_cache = resp
-        return resp
+                # 为每个节点保留最强前 3 条纽带
+                for target_id, sim, link_reason, sc in candidates[:3]:
+                    pair = tuple(sorted([d1.id, target_id]))
+                    threshold = 0.40 if sc > 0 else 0.46
+                    if pair not in existing_edges and sim > threshold:
+                        existing_edges.add(pair)
+                        # 共享实体的连线给予更高的弹性张力
+                        link_val = round(sim * (2.8 if sc > 0 else 1.8), 2)
+                        links.append(GraphLink(
+                            source=pair[0],
+                            target=pair[1],
+                            value=link_val,
+                            reason=link_reason
+                        ))
+                        node_degree[pair[0]] += 1
+                        node_degree[pair[1]] += 1
+
+            nodes: List[GraphNode] = []
+            for d in all_items:
+                deg = node_degree.get(d.id, 0)
+                ents = list(diary_entities_map.get(d.id, set()))
+                # 实体丰富的枢纽节点稍大一些，作为星系核心
+                node_size = round(max(5.0, min(16.0, 5.0 + deg * 1.5 + len(ents) * 0.8)), 1)
+                vec = cached_vectors.get(d.id)
+                color = d.mood_color or (vector_to_hex_color(vec) if vec else "#dc143c")
+                title = d.summary if d.summary else d.content[:25]
+
+                nodes.append(GraphNode(
+                    id=d.id,
+                    name=title,
+                    color=color,
+                    val=node_size,
+                    content=d.content,
+                    created_at=d.created_at.strftime("%Y-%m-%d"),
+                    entities=ents,
+                    mood=d.mood
+                ))
+
+            resp = GraphResponse(nodes=nodes, links=links)
+            self._graph_cache = resp
+            return resp
 
     def _save_entities_and_relations(self, db: Session, diary: Diary, extracted: dict):
         entities_data = extracted.get("entities", [])

@@ -6,7 +6,7 @@
     <canvas ref="canvasRef" class="w-full h-full block touch-none cursor-grab active:cursor-grabbing"></canvas>
 
     <!-- 左上角极简星图 HUD 与模式切换 -->
-    <div v-if="!loading" class="absolute top-3 left-3 right-16 z-20 flex flex-col gap-2 pointer-events-none">
+    <div class="absolute top-3 left-3 right-16 z-20 flex flex-col gap-2 pointer-events-none">
       <div class="flex flex-wrap items-center gap-2 pointer-events-auto">
         <!-- 视图切换胶囊 -->
         <div class="inline-flex items-center bg-[#08080a]/90 backdrop-blur-md border border-[#1c1c24] rounded-xs p-0.5 text-[11px] font-mono">
@@ -26,7 +26,7 @@
           </button>
         </div>
 
-        <div v-if="nodeCount > 0" class="inline-flex items-center space-x-2 text-[11px] font-mono text-zinc-400 bg-[#08080a]/85 backdrop-blur-md border border-[#1c1c24] px-2.5 py-1 rounded-xs w-fit">
+        <div v-if="!loading && nodeCount > 0" class="inline-flex items-center space-x-2 text-[11px] font-mono text-zinc-400 bg-[#08080a]/85 backdrop-blur-md border border-[#1c1c24] px-2.5 py-1 rounded-xs w-fit">
           <span class="text-[#dc143c] text-xs leading-none">✦</span>
           <span>{{ graphMode === 'diary' ? '日记' : '实体' }}: <strong class="text-zinc-200">{{ nodeCount }}</strong></span>
           <span class="text-zinc-600">·</span>
@@ -42,7 +42,7 @@
       </div>
 
       <!-- 高频实体快捷点亮胶囊（日记星系模式） -->
-      <div v-if="graphMode === 'diary' && topEntities.length > 0" class="flex flex-wrap items-center gap-1.5 pointer-events-auto">
+      <div v-if="!loading && graphMode === 'diary' && topEntities.length > 0" class="flex flex-wrap items-center gap-1.5 pointer-events-auto">
         <button
           v-for="ent in topEntities"
           :key="ent"
@@ -171,13 +171,24 @@
     </Transition>
 
     <!-- 加载指示 -->
-    <div v-if="loading" class="absolute inset-0 flex flex-col items-center justify-center bg-[#050505]/80 backdrop-blur-xs space-y-2.5 text-xs text-zinc-500 font-mono">
+    <div v-if="loading" class="absolute inset-0 flex flex-col items-center justify-center bg-[#050505]/80 backdrop-blur-xs space-y-2.5 text-xs text-zinc-500 font-mono z-10">
       <div class="flex items-center space-x-2 text-xs">
         <span class="text-zinc-700">✧</span>
         <span class="text-[#dc143c] animate-pulse">✦</span>
         <span class="text-zinc-700">✧</span>
       </div>
       <span>加载中...</span>
+    </div>
+
+    <!-- 错误提示与重试 -->
+    <div v-else-if="errorMsg" class="absolute inset-0 flex flex-col items-center justify-center bg-[#050505]/85 space-y-3 text-xs text-zinc-400 font-mono z-10 px-6 text-center">
+      <span class="text-[#f43f5e]">✧ {{ errorMsg }}</span>
+      <button
+        @click="initGraph()"
+        class="px-3 py-1.5 bg-[#180a0e] hover:bg-[#240d13] text-[#f43f5e] border border-[#dc143c]/50 rounded-xs transition-colors cursor-pointer"
+      >
+        重新加载
+      </button>
     </div>
   </div>
 </template>
@@ -203,6 +214,7 @@ const savedClusterMode = localStorage.getItem(CLUSTER_MODE_KEY)
 const canvasRef = ref(null)
 const graphMode = ref(savedClusterMode === 'entity' ? 'entity' : 'diary')
 const loading = ref(false)
+const errorMsg = ref('')
 const selectedNode = ref(null)
 const highlightNeighborIds = ref(new Set())
 const highlightTag = ref('')
@@ -217,7 +229,20 @@ let canvasSelection = null
 let nodesData = []
 let linksData = []
 let animFrameId = null
+let renderScheduled = false
+let currentRenderFn = null
 let clickHandler = null
+let activeRequestId = 0
+
+const scheduleRender = () => {
+  if (renderScheduled || !currentRenderFn) return
+  renderScheduled = true
+  animFrameId = requestAnimationFrame(() => {
+    renderScheduled = false
+    animFrameId = null
+    if (currentRenderFn) currentRenderFn()
+  })
+}
 
 const ENTITY_TYPE_COLORS = {
   person: '#f43f5e',
@@ -272,6 +297,7 @@ const clearSelection = () => {
   selectedNode.value = null
   highlightTag.value = ''
   highlightNeighborIds.value.clear()
+  scheduleRender()
 }
 
 const resetZoom = () => {
@@ -299,6 +325,7 @@ const highlightByEntity = (ent) => {
     } else {
       highlightNeighborIds.value.clear()
     }
+    scheduleRender()
     return
   }
 
@@ -310,13 +337,17 @@ const highlightByEntity = (ent) => {
     }
   }
   highlightNeighborIds.value = matched
+  scheduleRender()
 }
 
 const initGraph = async () => {
+  const reqId = ++activeRequestId
   if (animFrameId) {
     cancelAnimationFrame(animFrameId)
     animFrameId = null
   }
+  renderScheduled = false
+  currentRenderFn = null
   if (simulation) {
     simulation.stop()
     simulation = null
@@ -324,9 +355,11 @@ const initGraph = async () => {
   currentTransform = zoomIdentity
 
   loading.value = true
+  errorMsg.value = ''
   try {
     if (graphMode.value === 'entity') {
       const res = await diaryApi.getEntityGraph()
+      if (reqId !== activeRequestId) return
       nodesData = (res.data.nodes || []).map(n => ({
         ...n,
         color: n.is_owner ? '#dc143c' : (ENTITY_TYPE_COLORS[n.entity_type] || '#94a3b8'),
@@ -336,6 +369,7 @@ const initGraph = async () => {
       topEntities.value = []
     } else {
       const res = await diaryApi.getClusterGraph2D()
+      if (reqId !== activeRequestId) return
       nodesData = res.data.nodes || []
       linksData = res.data.links || []
 
@@ -540,15 +574,16 @@ const initGraph = async () => {
       }
 
       ctx.restore()
-      animFrameId = requestAnimationFrame(render)
     }
 
-    render()
+    currentRenderFn = render
+    scheduleRender()
 
     zoomBehaviorInstance = zoom()
       .scaleExtent([0.3, 4.5])
       .on('zoom', (event) => {
         currentTransform = event.transform
+        scheduleRender()
       })
 
     canvasSelection = select(canvas)
@@ -578,15 +613,20 @@ const initGraph = async () => {
         selectedNode.value = clicked
         highlightTag.value = ''
         highlightNeighborIds.value = getNeighbors(clicked.id)
+        scheduleRender()
       } else {
         clearSelection()
       }
     }
     canvas.addEventListener('click', clickHandler)
   } catch (err) {
+    if (reqId !== activeRequestId) return
     console.error('加载 2D 聚类星图失败', err)
+    errorMsg.value = '星图加载失败或请求超时，请检查后端服务后重试'
   } finally {
-    loading.value = false
+    if (reqId === activeRequestId) {
+      loading.value = false
+    }
   }
 }
 
@@ -597,6 +637,13 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (animFrameId) cancelAnimationFrame(animFrameId)
   if (simulation) simulation.stop()
+  if (canvasRef.value && clickHandler) {
+    canvasRef.value.removeEventListener('click', clickHandler)
+  }
+  if (zoomBehaviorInstance) {
+    zoomBehaviorInstance.on('zoom', null)
+  }
+  currentRenderFn = null
 })
 </script>
 

@@ -1,5 +1,6 @@
 import os
 import datetime
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException, Query
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
 
 from app.config import settings
-from app.database import engine, Base, get_db, ensure_sqlite_migrations
+from app.database import engine, Base, get_db, ensure_sqlite_migrations, SessionLocal
 from app.models import Diary, Entity, EntityRelation, DiaryEntity, DiaryQuote
 from app.schemas import (
     DiaryCreate, DiaryUpdate, DiaryEntitiesUpdate, DiaryMoodUpdate, AliasCreateRequest, EntityTypeUpdateRequest, RelationCreateRequest, OwnerNameUpdateRequest, DiaryOut, SearchResultItem, SearchResponse, GraphResponse, EntityGraphResponse, EntityOut, RelationOut, DiaryImportRequest
@@ -30,6 +31,22 @@ app = FastAPI(
     version="1.6.0",
     description="基于本地向量检索、实体关系图谱与 2D 力导向星系聚类图的极简关联日记系统"
 )
+
+def _startup_warmup():
+    """后台预热：压缩 LanceDB 碎片事务并预计算 2D 星图缓存"""
+    from app.services.vector_store import vector_store
+    vector_store.compact()
+    db = SessionLocal()
+    try:
+        memory_engine.get_cluster_graph_2d(db)
+    except Exception as e:
+        print(f"[Warmup Warning] graph prewarm failed: {e}")
+    finally:
+        db.close()
+
+@app.on_event("startup")
+def on_startup():
+    threading.Thread(target=_startup_warmup, daemon=True, name="startup_warmup").start()
 
 app.add_middleware(
     CORSMiddleware,

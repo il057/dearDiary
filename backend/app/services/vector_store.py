@@ -73,5 +73,15 @@ class VectorStore:
         except Exception as e:
             print(f"[Warning] LanceDB delete failed: {e}")
 
+    def compact(self):
+        """压缩 LanceDB 碎片事务文件，提升全表读取与检索速度"""
+        try:
+            if len(self.table) == 0:
+                return
+            self.table.compact_files()
+            self.table.cleanup_old_versions()
+        except Exception as e:
+            print(f"[Warning] LanceDB compact failed: {e}")
+
 vector_store = VectorStore()
 

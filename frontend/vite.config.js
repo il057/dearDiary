@@ -47,7 +47,7 @@ export default defineConfig({
               cacheableResponse: {
                 statuses: [0, 200]
               },
-              networkTimeoutSeconds: 4
+              networkTimeoutSeconds: 15
             }
           },
           {
