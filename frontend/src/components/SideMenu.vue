@@ -37,10 +37,10 @@
             <span><span class="text-[#dc143c] mr-1">✧</span>视图</span>
             <span class="text-[10px] text-zinc-600">VIEW</span>
           </div>
-          <div class="grid grid-cols-3 gap-1.5 bg-[#0c0c10] p-1 border border-[#1a1a20] rounded-xs">
+          <div class="grid grid-cols-4 gap-1 bg-[#0c0c10] p-1 border border-[#1a1a20] rounded-xs">
             <button
               @click="$emit('change-tab', 'timeline')"
-              class="flex items-center justify-center space-x-1 py-2 px-1.5 rounded-xs transition-all cursor-pointer text-xs"
+              class="flex items-center justify-center space-x-1 py-2 px-1 rounded-xs transition-all cursor-pointer text-[11px]"
               :class="activeTab === 'timeline'
                 ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/50 font-medium'
                 : 'text-zinc-400 hover:text-zinc-200 border border-transparent'"
@@ -50,7 +50,7 @@
             </button>
             <button
               @click="$emit('change-tab', 'book')"
-              class="flex items-center justify-center space-x-1 py-2 px-1.5 rounded-xs transition-all cursor-pointer text-xs"
+              class="flex items-center justify-center space-x-1 py-2 px-1 rounded-xs transition-all cursor-pointer text-[11px]"
               :class="activeTab === 'book'
                 ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/50 font-medium'
                 : 'text-zinc-400 hover:text-zinc-200 border border-transparent'"
@@ -60,13 +60,23 @@
             </button>
             <button
               @click="$emit('change-tab', 'cluster')"
-              class="flex items-center justify-center space-x-1 py-2 px-1.5 rounded-xs transition-all cursor-pointer text-xs"
+              class="flex items-center justify-center space-x-1 py-2 px-1 rounded-xs transition-all cursor-pointer text-[11px]"
               :class="activeTab === 'cluster'
                 ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/50 font-medium'
                 : 'text-zinc-400 hover:text-zinc-200 border border-transparent'"
             >
               <Boxes class="w-3.5 h-3.5 shrink-0" />
               <span>星图</span>
+            </button>
+            <button
+              @click="$emit('change-tab', 'analytics')"
+              class="flex items-center justify-center space-x-1 py-2 px-1 rounded-xs transition-all cursor-pointer text-[11px]"
+              :class="activeTab === 'analytics'
+                ? 'bg-[#180a0e] text-[#f43f5e] border border-[#dc143c]/50 font-medium'
+                : 'text-zinc-400 hover:text-zinc-200 border border-transparent'"
+            >
+              <BarChart3 class="w-3.5 h-3.5 shrink-0" />
+              <span>洞察</span>
             </button>
           </div>
         </div>
@@ -241,7 +251,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import {
-  X, List, BookOpen, Boxes, ChevronLeft, ChevronRight,
+  X, List, BookOpen, Boxes, BarChart3, ChevronLeft, ChevronRight,
   ArrowUp, ArrowDown, Sparkles, Download, Upload, FileText
 } from '@lucide/vue'
 

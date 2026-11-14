@@ -16,6 +16,7 @@ from app.schemas import (
 )
 from app.services.memory_engine import memory_engine
 from app.services.knowledge_base import knowledge_base
+from app.services.analytics_service import get_analytics_overview
 
 # 单线程后台任务队列：避免批量导入时并发写 SQLite 锁库或同时压垮本地 Ollama
 _memory_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="memory_worker")
@@ -548,6 +549,18 @@ def import_diaries(payload: DiaryImportRequest, db: Session = Depends(get_db)):
 
     memory_engine.invalidate_graph_cache()
     return {"status": "success", "imported": imported_count, "skipped": skipped_count}
+
+
+# ----------------- 数据分析 API -----------------
+
+@app.get("/api/analytics/overview")
+def analytics_overview(
+    range: str = Query("all", pattern="^(30d|90d|365d|all)$"),
+    db: Session = Depends(get_db)
+):
+    """获取日记数据分析总览（字数、连击、热力图、时段、情绪、实体、引用）"""
+    return get_analytics_overview(db, range_key=range)
+
 
 if __name__ == "__main__":
     import uvicorn

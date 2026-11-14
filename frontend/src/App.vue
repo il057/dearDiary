@@ -70,6 +70,7 @@
           :diaries="diaries"
           @jump-to-date="handleJumpToDate"
           @create-for-today="openComposer()"
+          @open-analytics="switchTab('analytics')"
         />
 
         <!-- 2. 主页快捷创建新日记按钮/输入卡片 (点击打开新页面独立写作) -->
@@ -117,6 +118,11 @@
       <!-- 星系聚类模式 (全宽锁屏展示，禁止 iOS PWA 上下滚动) -->
       <div v-if="activeTab === 'cluster'" class="flex-1 min-h-0 w-full">
         <ClusterView @open-diary="handleOpenDiaryById" @search-entity="handleFilterTag" />
+      </div>
+
+      <!-- 数据分析与洞察模式 -->
+      <div v-if="activeTab === 'analytics'" class="w-full">
+        <AnalyticsView @open-diary="handleOpenDiaryById" @search-entity="handleFilterTag" />
       </div>
     </main>
 
@@ -185,10 +191,11 @@ import SideMenu from './components/SideMenu.vue'
 import DiaryComposerView from './components/DiaryComposerView.vue'
 import DiaryDetailView from './components/DiaryDetailView.vue'
 import KnowledgeModal from './components/KnowledgeModal.vue'
+import AnalyticsView from './components/AnalyticsView.vue'
 import { diaryApi } from './api/diary'
 
 const VIEW_STATE_KEY = 'deardiary_view_state'
-const VALID_TABS = ['timeline', 'book', 'cluster']
+const VALID_TABS = ['timeline', 'book', 'cluster', 'analytics']
 
 const loadViewState = () => {
   try {

@@ -8,11 +8,16 @@
         <span class="text-zinc-600 hidden sm:inline">· {{ weekRangeText }}</span>
       </div>
 
-      <div class="text-zinc-500">
+      <button
+        type="button"
+        @click="$emit('open-analytics')"
+        class="text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+        title="查看数据洞察"
+      >
         <span>已记 </span>
         <span class="text-[#f43f5e]">{{ writtenDaysCount }}</span>
         <span class="text-zinc-600"> / 7 ✧</span>
-      </div>
+      </button>
     </div>
 
     <!-- 优雅水平时间刻度线与 7 个日期节点 -->
@@ -80,7 +85,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['jump-to-date', 'create-for-today'])
+const emit = defineEmits(['jump-to-date', 'create-for-today', 'open-analytics'])
 
 const dayNames = ['日', '一', '二', '三', '四', '五', '六']
 

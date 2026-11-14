@@ -73,6 +73,11 @@ export const diaryApi = {
     return api.get('/knowledge')
   },
 
+  // 获取数据分析总览
+  getAnalyticsOverview(range = 'all') {
+    return api.get('/analytics/overview', { params: { range } })
+  },
+
   // 绑定别名
   setAlias(alias, canonical) {
     return api.post('/knowledge/alias', { alias, canonical })
