@@ -14,15 +14,15 @@
 - **AI 自动提取情绪与实体**：接入本地 **Ollama**（或任意 OpenAI 兼容接口），自动识别日记心境、人物、宠物、地点、核心意象与回忆中的绝对年份，并严格过滤代词与无意义虚词。
 - **专属词典与别名对齐（`KnowledgeBase`）**：支持将同一人物/事物的不同昵称、别名自动归并为主实体，可在前端弹窗中实时编辑，也支持通过 `backend/data/knowledge.json` 管理（参考模板 `backend/knowledge.example.json`）。
 - **2D 力导向星系聚类视图**：基于 D3 力导向图（`ClusterView`）直观呈现日记与实体之间的星系网络，支持缩放、拖拽与节点跳转。
-- **极简暗黑美学 & 移动端 PWA**：采用 Vue 3 + Tailwind CSS + `UnifontJP` 打造纯黑（`#050505`）+ 绯红（`#dc143c`）视觉体验，内置近一周记录打卡、时间轴列表、专注写作页与侧边日历，支持 iOS / Android 添加至主屏幕作为独立 PWA 使用。
+- **极简暗黑美学 & 移动端 PWA**：采用 Vue 3 + Tailwind CSS + `UnifontJP` 打造纯黑（`#050505`）+ 绯红（`#dc143c`）视觉体验，内置近一周记录打卡、时间轴列表、笔记本视图、数据分析总览、专注写作页、日记引用与侧边日历，支持 iOS / Android 添加至主屏幕作为独立 PWA 使用。
 
 ---
 
 ## 🛠️ 技术栈
 
 - **后端**：Python、FastAPI、SQLAlchemy、SQLite、LanceDB、Pydantic Settings
-- **模型与向量**：本地 Ollama（默认 `qwen2.5:3b` 负责实体抽取，`qwen3-embedding:0.6b` 负责 1024 维向量嵌入），无模型服务时自动启用确定性兜底算法
-- **前端**：Vue 3、Vite、Tailwind CSS v4、D3（`d3-force`、`d3-zoom`、`d3-drag`、`d3-selection`）、Lucide Icons、`vite-plugin-pwa`
+- **模型与向量**：本地 Ollama（默认 `qwen3:8b` 负责实体抽取与摘要/情绪提取，`qwen3-embedding:0.6b` 负责 1024 维向量嵌入），亦兼容 OpenAI 格式接口；无模型服务时自动回退至词典扫描与首行摘要兜底
+- **前端**：Vue 3、Vite、Tailwind CSS v4、D3（`d3-force`、`d3-zoom`、`d3-drag`、`d3-selection`）、Lucide Icons（`@lucide/vue` / `lucide-vue-next`）、`vite-plugin-pwa`
 
 ---
 
@@ -38,10 +38,11 @@ dearDiary/
 │   │   ├── models.py               # 日记、实体、关系数据模型
 │   │   ├── schemas.py              # Pydantic 请求/响应模型
 │   │   └── services/
-│   │       ├── llm_client.py       # Ollama LLM 与 Embedding 客户端
-│   │       ├── memory_engine.py    # 实体抽取、图谱写入与发散检索
-│   │       ├── vector_store.py     # LanceDB 向量存储与查询
-│   │       └── knowledge_base.py   # 个人词典与别名对齐
+│   │       ├── llm_client.py        # Ollama / OpenAI 兼容 LLM 与 Embedding 客户端
+│   │       ├── memory_engine.py     # 实体抽取、图谱写入与发散检索
+│   │       ├── vector_store.py      # LanceDB 向量存储与查询
+│   │       ├── knowledge_base.py    # 个人词典与别名对齐
+│   │       └── analytics_service.py # 日记统计与数据分析总览
 │   ├── .env.example                # 环境变量配置模板
 │   ├── knowledge.example.json      # 个人词典配置示例
 │   └── requirements.txt            # Python 依赖清单
@@ -49,7 +50,8 @@ dearDiary/
 │   ├── public/                     # Favicon、PWA 图标与字体文件
 │   ├── src/
 │   │   ├── api/diary.js            # 后端 API 封装
-│   │   ├── components/             # 时间轴、星系图、写作页、侧边栏等组件
+│   │   ├── components/             # 时间轴、笔记本、星系图、写作页、统计、侧边栏等组件
+│   │   ├── utils/highlight.js      # 搜索关键词高亮工具
 │   │   ├── App.vue                 # 主布局与导航切换
 │   │   └── style.css               # 全局暗黑主题样式
 │   ├── index.html
@@ -71,7 +73,7 @@ dearDiary/
 如使用本地 Ollama，可提前拉取默认模型：
 
 ```bash
-ollama pull qwen2.5:3b
+ollama pull qwen3:8b
 ollama pull qwen3-embedding:0.6b
 ```
 
@@ -135,6 +137,6 @@ npm run dev -- --host 0.0.0.0
 
 ## 🙏 致谢与引用
 
-- **界面字体**：内置点阵字体使用 [GNU Unifont](https://unifoundry.com/unifont/)（`unifont_jp.otf`）。
+- **界面字体**：内置点阵字体使用 [GNU Unifont](https://unifoundry.com/unifont/)（`unifont_jp.otf`），笔记本视图打字机字体使用 `迫真打字油印體.ttf`。
 - **核心开源生态**：感谢 [FastAPI](https://fastapi.tiangolo.com/)、[LanceDB](https://lancedb.com/)、[Ollama](https://ollama.com/)、[Vue 3](https://vuejs.org/)、[Tailwind CSS](https://tailwindcss.com/)、[D3.js](https://d3js.org/) 与 [Lucide](https://lucide.dev/) 等开源项目。
 

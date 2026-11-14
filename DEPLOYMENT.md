@@ -52,40 +52,46 @@ nssm set dearDiary-Backend AppDirectory "d:\Code\dearDiary\backend"
 nssm start dearDiary-Backend
 ```
 
-4. 对于前端，建议在生产环境下直接使用后端托管编译后的静态资源（或使用 caddy/nginx/serve），或者将 Vite Preview / 前端生产构建也注册为服务：
+4. 对于前端，建议使用 Nginx / Caddy 托管 `frontend/dist` 并将 `/api` 反向代理至 `http://127.0.0.1:8000`，或直接使用 Vite Preview 作为前端服务：
 ```powershell
 cd d:\Code\dearDiary\frontend
 npm run build
-# 使用轻量级 serve
-npx -y serve -s dist -l 5173
+# 启动生产构建预览（自动继承 vite.config.js 中的 /api 代理）
+npm run preview -- --host 0.0.0.0 --port 5173
 ```
 
 ### 方案 B：Windows 计划任务（Task Scheduler）或开机启动文件夹
-按 `Win + R` 输入 `shell:startup`，将 `d:\Code\dearDiary\scripts\run_all.bat` 的快捷方式放入该文件夹，主机开机登录后会自动自启。
+按 `Win + R` 输入 `shell:startup`，将 `d:\Code\dearDiary\scripts\run_all.bat`（或 `run_all.ps1`）的快捷方式放入该文件夹，主机开机登录后会自动自启。
 
 ---
 
-## 4. 大模型与向量模型配置 (OpenAI / Ollama / DeepSeek)
+## 4. 大模型与向量模型配置 (Ollama / OpenAI 兼容接口)
 
-编辑 `d:\Code\dearDiary\backend\.env` 文件：
+参考 `d:\Code\dearDiary\backend\.env.example` 创建或编辑 `d:\Code\dearDiary\backend\.env` 文件：
 ```ini
-# 若使用云端大模型 (如 DeepSeek、OpenAI、Moonshot)
-LLM_API_KEY=sk-xxxx
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_MODEL=deepseek-chat
+# 默认配置：本地 Ollama 服务 (免 API Key)
+LLM_API_KEY=ollama
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=qwen3:8b
+OLLAMA_KEEP_ALIVE=5m
 
-# 若使用云端向量 (如 OpenAI text-embedding-3-small)
-EMBEDDING_API_KEY=sk-xxxx
-EMBEDDING_BASE_URL=https://api.openai.com/v1
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIM=1536
+# 向量嵌入配置：本地 Qwen3-Embedding-0.6B (1024 维)
+EMBEDDING_API_KEY=ollama
+EMBEDDING_BASE_URL=http://localhost:11434/v1
+EMBEDDING_MODEL=qwen3-embedding:0.6b
+EMBEDDING_DIM=1024
 
-# 若使用本地 Ollama (完全离线与私有化)
-# LLM_BASE_URL=http://localhost:11434/v1
-# LLM_MODEL=qwen2.5:7b
-# EMBEDDING_BASE_URL=http://localhost:11434/v1
-# EMBEDDING_MODEL=nomic-embed-text
-# EMBEDDING_DIM=768
+# 若 Ollama 部署在局域网或 Tailscale 远端主机，可取消注释并填写对应地址：
+# OLLAMA_HOST=http://100.x.y.z:11434
+
+# 若改用云端 OpenAI 兼容大模型（如 DeepSeek、OpenAI 等）：
+# LLM_API_KEY=sk-xxxx
+# LLM_BASE_URL=https://api.deepseek.com/v1
+# LLM_MODEL=deepseek-chat
+# EMBEDDING_API_KEY=sk-xxxx
+# EMBEDDING_BASE_URL=https://api.openai.com/v1
+# EMBEDDING_MODEL=text-embedding-3-small
+# EMBEDDING_DIM=1536
 ```
-> 系统在无 API Key 状态下内置了启发式规则抽取与确定性伪向量兜底算法，可直接开箱体验界面流转。
+> 当模型服务未启动或不可用时，日记的写入、浏览与导出仍可正常使用（实体提取会回退至 `knowledge.json` 自定义词典扫描，摘要回退为首行文本），但语义向量检索与 AI 实体关系抽取需要可用的模型服务支持。
 
