@@ -204,6 +204,14 @@
 
               <div class="flex items-center space-x-2 shrink-0 ml-2">
                 <span
+                  v-if="item.echoes && item.echoes.length > 0"
+                  class="inline-flex items-center space-x-0.5 text-[10px] text-zinc-400 group-hover:text-[#fda4af] font-mono transition-colors"
+                  :title="`${item.echoes.length} 条回响批注`"
+                >
+                  <StickyNote class="w-2.5 h-2.5 text-[#dc143c]/80" />
+                  <span>{{ item.echoes.length }}</span>
+                </span>
+                <span
                   v-if="item.quoted_by && item.quoted_by.length > 0"
                   class="inline-flex items-center space-x-0.5 text-[10px] text-[#f43f5e]/80 font-mono"
                   :title="`被 ${item.quoted_by.length} 篇后续日记引用`"
@@ -236,7 +244,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { ArrowUp, Quote } from '@lucide/vue'
+import { ArrowUp, Quote, StickyNote } from '@lucide/vue'
 import { splitHighlightSegments, isEntityHighlighted } from '../utils/highlight'
 
 const props = defineProps({

@@ -172,6 +172,14 @@
                       </template>
                       <template v-else>{{ displayLeftPage.text }}</template>
                     </article>
+
+                    <!-- 贴在日记末尾的回响纸片 -->
+                    <EchoPaperSlip
+                      v-if="displayLeftPage.isLastPage && displayLeftPage.diary.echoes && displayLeftPage.diary.echoes.length > 0"
+                      :echoes="displayLeftPage.diary.echoes"
+                      :highlight-terms="highlightTerms"
+                      @open-detail="$emit('select-diary', displayLeftPage.diary)"
+                    />
                   </div>
 
                   <!-- 页脚：标签、全文编辑按钮与页码 -->
@@ -299,6 +307,14 @@
                       </template>
                       <template v-else>{{ displayRightPage.text }}</template>
                     </article>
+
+                    <!-- 贴在日记末尾的回响纸片 -->
+                    <EchoPaperSlip
+                      v-if="displayRightPage.isLastPage && displayRightPage.diary.echoes && displayRightPage.diary.echoes.length > 0"
+                      :echoes="displayRightPage.diary.echoes"
+                      :highlight-terms="highlightTerms"
+                      @open-detail="$emit('select-diary', displayRightPage.diary)"
+                    />
                   </div>
 
                   <!-- 页脚 -->
@@ -463,6 +479,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ChevronLeft, ChevronRight, Plus, ArrowDownUp } from '@lucide/vue'
+import EchoPaperSlip from './EchoPaperSlip.vue'
 
 const LINE_HEIGHT = 30
 
@@ -586,6 +603,13 @@ const recomputePages = () => {
   const pages = []
   for (const diary of items) {
     const chunks = paginateText(diary.content || '', maxH, el)
+    // 若该日记有回响纸片且最后一页剩余空间不足，则追加一页以防纸片遮挡正文末尾文字
+    if (diary.echoes && diary.echoes.length > 0 && chunks.length > 0) {
+      el.textContent = chunks[chunks.length - 1]
+      if (maxH - el.scrollHeight < 120) {
+        chunks.push('')
+      }
+    }
     const total = chunks.length
     chunks.forEach((chunk, idx) => {
       pages.push({
@@ -622,7 +646,7 @@ watch(pageBodyMeasureWrapRef, () => {
 
 watch(orderedItems, () => {
   nextTick(recomputePages)
-}, { immediate: true })
+}, { immediate: true, deep: true })
 
 const maxIndex = computed(() => {
   const len = virtualPages.value.length

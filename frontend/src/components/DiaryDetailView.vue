@@ -203,6 +203,126 @@
           <template v-else>{{ diary.content }}</template>
         </article>
 
+        <!-- 回响（事后批注 / 谜语解码） -->
+        <div class="pt-5 border-t border-[#18181f] space-y-3">
+          <div class="flex items-center justify-between text-xs text-zinc-500 select-none">
+            <span class="font-mono uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
+              <StickyNote class="w-3.5 h-3.5 text-[#dc143c]" />
+              <span>回响</span>
+              <span v-if="diary.echoes && diary.echoes.length > 0" class="text-zinc-600">({{ diary.echoes.length }})</span>
+            </span>
+
+            <button
+              v-if="!isAddingEcho"
+              @click="startAddEcho"
+              class="inline-flex items-center space-x-1 text-[11px] font-mono px-2.5 py-1 bg-[#12090c] hover:bg-[#1b0c11] text-[#fda4af] border border-[#dc143c]/30 hover:border-[#dc143c]/60 rounded-xs transition-colors cursor-pointer"
+            >
+              <Plus class="w-3 h-3 text-[#dc143c]" />
+              <span>贴一条回响</span>
+            </button>
+          </div>
+
+          <!-- 已有回响列表 -->
+          <div v-if="diary.echoes && diary.echoes.length > 0" class="space-y-2.5">
+            <div
+              v-for="echo in diary.echoes"
+              :key="echo.id"
+              class="p-3 bg-[#0c0a0d] border border-[#221a20] border-l-2 border-l-[#dc143c]/65 rounded-xs space-y-1.5 group"
+            >
+              <div class="flex items-center justify-between text-[11px] text-zinc-500 select-none">
+                <span class="font-mono text-[#f43f5e]/80">✦ {{ formatCleanTime(echo.created_at) }}</span>
+                <div v-if="editingEchoId !== echo.id" class="flex items-center space-x-2 opacity-70 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    @click="startEditEcho(echo)"
+                    class="text-zinc-400 hover:text-zinc-100 cursor-pointer"
+                    title="编辑回响"
+                  >
+                    <Pencil class="w-3 h-3" />
+                  </button>
+                  <button
+                    @click="handleDeleteEcho(echo.id)"
+                    class="text-zinc-500 hover:text-red-400 cursor-pointer"
+                    title="删除回响"
+                  >
+                    <Trash2 class="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              <!-- 编辑态 -->
+              <div v-if="editingEchoId === echo.id" class="space-y-2 pt-1">
+                <textarea
+                  v-model="editingEchoText"
+                  @keydown.ctrl.enter.prevent="saveEditEcho(echo.id)"
+                  @keydown.meta.enter.prevent="saveEditEcho(echo.id)"
+                  rows="3"
+                  class="w-full bg-[#060608] p-2.5 text-xs sm:text-sm text-zinc-100 border border-[#dc143c]/45 rounded-xs focus:outline-none focus:border-[#dc143c] resize-y leading-relaxed"
+                ></textarea>
+                <div class="flex items-center justify-end space-x-2 text-xs">
+                  <button
+                    @click="editingEchoId = null"
+                    class="px-2.5 py-1 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+                  >
+                    取消
+                  </button>
+                  <button
+                    @click="saveEditEcho(echo.id)"
+                    :disabled="echoSubmitting || !editingEchoText.trim()"
+                    class="px-3 py-1 bg-[#180a0e] hover:bg-[#260e15] text-[#fda4af] border border-[#dc143c]/45 rounded-xs cursor-pointer disabled:opacity-40"
+                  >
+                    保存
+                  </button>
+                </div>
+              </div>
+
+              <!-- 阅读态 -->
+              <p v-else class="text-xs sm:text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words">
+                <template v-if="highlightTerms.length > 0">
+                  <template v-for="(seg, sIdx) in splitHighlightSegments(echo.content, highlightTerms)" :key="sIdx">
+                    <mark v-if="seg.match" class="bg-[#dc143c]/25 text-[#fda4af] px-0.5 rounded-xs">{{ seg.text }}</mark>
+                    <template v-else>{{ seg.text }}</template>
+                  </template>
+                </template>
+                <template v-else>{{ echo.content }}</template>
+              </p>
+            </div>
+          </div>
+
+          <!-- 新增回响输入框 -->
+          <div v-if="isAddingEcho" class="p-3 bg-[#0c0a0d] border border-[#dc143c]/35 rounded-xs space-y-2.5">
+            <textarea
+              ref="newEchoInputRef"
+              v-model="newEchoText"
+              @keydown.ctrl.enter.prevent="submitNewEcho"
+              @keydown.meta.enter.prevent="submitNewEcho"
+              @keydown.esc="cancelAddEcho"
+              rows="3"
+              placeholder="给过去的自己留一条解码或回响... (Ctrl/Cmd + Enter 提交)"
+              class="w-full bg-[#060608] p-2.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-600 border border-[#241c21] rounded-xs focus:outline-none focus:border-[#dc143c]/75 resize-y leading-relaxed"
+            ></textarea>
+            <div class="flex items-center justify-end space-x-2 text-xs">
+              <button
+                @click="cancelAddEcho"
+                class="px-2.5 py-1 text-zinc-400 hover:text-zinc-200 cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                @click="submitNewEcho"
+                :disabled="echoSubmitting || !newEchoText.trim()"
+                class="inline-flex items-center space-x-1 px-3 py-1 bg-[#180a0e] hover:bg-[#260e15] text-[#fda4af] border border-[#dc143c]/45 rounded-xs cursor-pointer disabled:opacity-40"
+              >
+                <Check class="w-3 h-3 text-[#dc143c]" />
+                <span>贴上回响</span>
+              </button>
+            </div>
+          </div>
+
+          <p v-else-if="!diary.echoes || diary.echoes.length === 0" class="text-[11px] text-zinc-600 font-mono select-none">
+            暂无回响，可随时在此补充当时的隐晦指代或后续感悟
+          </p>
+        </div>
+
         <!-- 底部标签栏 -->
         <div class="pt-6 border-t border-[#18181f] space-y-3 select-none">
           <div class="flex items-center justify-between text-xs text-zinc-500">
@@ -340,10 +460,10 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import {
   ArrowLeft, RefreshCw, Pencil, Trash2, Check,
-  Clock, Sparkles, X, Plus, Quote
+  Clock, Sparkles, X, Plus, Quote, StickyNote
 } from '@lucide/vue'
 import { splitHighlightSegments, isEntityHighlighted } from '../utils/highlight'
 import { diaryApi } from '../api/diary'
@@ -364,7 +484,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits([
-  'close', 'update', 'delete', 'reindex', 'filter-tag', 'update-entities', 'select-related', 'quote'
+  'close', 'update', 'delete', 'reindex', 'filter-tag', 'update-entities', 'update-echoes', 'select-related', 'quote'
 ])
 
 const isEditing = ref(false)
@@ -373,6 +493,12 @@ const editDraftTime = ref('')
 const editDraftQuotes = ref([])
 const isAddingTag = ref(false)
 const newTagText = ref('')
+const isAddingEcho = ref(false)
+const newEchoText = ref('')
+const newEchoInputRef = ref(null)
+const editingEchoId = ref(null)
+const editingEchoText = ref('')
+const echoSubmitting = ref(false)
 const relatedDiaries = ref([])
 const relatedLoading = ref(false)
 
@@ -396,10 +522,76 @@ watch(
   () => props.diary?.id || props.diary?.diary_id,
   (newId) => {
     isEditing.value = false
+    isAddingEcho.value = false
+    newEchoText.value = ''
+    editingEchoId.value = null
+    editingEchoText.value = ''
     fetchRelated(newId)
   },
   { immediate: true }
 )
+
+const startAddEcho = () => {
+  isAddingEcho.value = true
+  nextTick(() => {
+    newEchoInputRef.value?.focus()
+  })
+}
+
+const cancelAddEcho = () => {
+  isAddingEcho.value = false
+  newEchoText.value = ''
+}
+
+const submitNewEcho = async () => {
+  const text = newEchoText.value.trim()
+  const diaryId = props.diary?.id || props.diary?.diary_id
+  if (!text || !diaryId || echoSubmitting.value) return
+  echoSubmitting.value = true
+  try {
+    const res = await diaryApi.createEcho(diaryId, text)
+    const nextEchoes = [...(props.diary.echoes || []), res.data]
+    emit('update-echoes', { id: diaryId, echoes: nextEchoes })
+    newEchoText.value = ''
+    isAddingEcho.value = false
+  } finally {
+    echoSubmitting.value = false
+  }
+}
+
+const startEditEcho = (echo) => {
+  editingEchoId.value = echo.id
+  editingEchoText.value = echo.content || ''
+}
+
+const saveEditEcho = async (echoId) => {
+  const text = editingEchoText.value.trim()
+  const diaryId = props.diary?.id || props.diary?.diary_id
+  if (!text || !diaryId || echoSubmitting.value) return
+  echoSubmitting.value = true
+  try {
+    const res = await diaryApi.updateEcho(echoId, text)
+    const nextEchoes = (props.diary.echoes || []).map(e => (e.id === echoId ? res.data : e))
+    emit('update-echoes', { id: diaryId, echoes: nextEchoes })
+    editingEchoId.value = null
+    editingEchoText.value = ''
+  } finally {
+    echoSubmitting.value = false
+  }
+}
+
+const handleDeleteEcho = async (echoId) => {
+  const diaryId = props.diary?.id || props.diary?.diary_id
+  if (!diaryId || echoSubmitting.value) return
+  echoSubmitting.value = true
+  try {
+    await diaryApi.deleteEcho(echoId)
+    const nextEchoes = (props.diary.echoes || []).filter(e => e.id !== echoId)
+    emit('update-echoes', { id: diaryId, echoes: nextEchoes })
+  } finally {
+    echoSubmitting.value = false
+  }
+}
 
 const toDatetimeLocal = (isoStr) => {
   if (!isoStr) return ''

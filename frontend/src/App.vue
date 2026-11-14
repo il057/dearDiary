@@ -164,6 +164,7 @@
       @reindex="handleReindexSingle"
       @filter-tag="handleFilterTag"
       @update-entities="handleUpdateDiaryEntities"
+      @update-echoes="handleUpdateDiaryEchoes"
       @select-related="handleOpenDiaryById"
       @quote="handleQuoteDiary"
     />
@@ -506,6 +507,20 @@ const handleUpdateDiaryEntities = async (payload) => {
     showToast('标签已更新')
   } catch {
     showToast('修改标签失败', 'error')
+  }
+}
+
+const handleUpdateDiaryEchoes = ({ id, echoes }) => {
+  const idx = diaries.value.findIndex(d => (d.id || d.diary_id) === id)
+  if (idx !== -1) {
+    diaries.value[idx].echoes = echoes
+  }
+  const sIdx = searchResults.value.findIndex(d => (d.id || d.diary_id) === id)
+  if (sIdx !== -1) {
+    searchResults.value[sIdx].echoes = echoes
+  }
+  if (selectedDiary.value && (selectedDiary.value.id || selectedDiary.value.diary_id) === id) {
+    selectedDiary.value.echoes = echoes
   }
 }
 

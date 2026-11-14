@@ -10,9 +10,9 @@ from sqlalchemy import func, or_
 
 from app.config import settings
 from app.database import engine, Base, get_db, ensure_sqlite_migrations, SessionLocal
-from app.models import Diary, Entity, EntityRelation, DiaryEntity, DiaryQuote
+from app.models import Diary, Entity, EntityRelation, DiaryEntity, DiaryQuote, DiaryEcho
 from app.schemas import (
-    DiaryCreate, DiaryUpdate, DiaryEntitiesUpdate, DiaryMoodUpdate, AliasCreateRequest, EntityTypeUpdateRequest, RelationCreateRequest, OwnerNameUpdateRequest, DiaryOut, SearchResultItem, SearchResponse, GraphResponse, EntityGraphResponse, EntityOut, RelationOut, DiaryImportRequest
+    DiaryCreate, DiaryUpdate, DiaryEntitiesUpdate, DiaryMoodUpdate, DiaryEchoCreate, DiaryEchoUpdate, DiaryEchoOut, AliasCreateRequest, EntityTypeUpdateRequest, RelationCreateRequest, OwnerNameUpdateRequest, DiaryOut, SearchResultItem, SearchResponse, GraphResponse, EntityGraphResponse, EntityOut, RelationOut, DiaryImportRequest
 )
 from app.services.memory_engine import memory_engine
 from app.services.knowledge_base import knowledge_base
@@ -154,11 +154,52 @@ def delete_diary(diary_id: int, db: Session = Depends(get_db)):
     vector_store.delete_by_diary_id(diary_id)
     db.query(EntityRelation).filter(EntityRelation.diary_id == diary_id).delete(synchronize_session=False)
     db.query(DiaryQuote).filter(or_(DiaryQuote.diary_id == diary_id, DiaryQuote.quoted_diary_id == diary_id)).delete(synchronize_session=False)
+    db.query(DiaryEcho).filter(DiaryEcho.diary_id == diary_id).delete(synchronize_session=False)
     db.delete(diary)
     db.commit()
     memory_engine.cleanup_orphan_entities(db)
     memory_engine.invalidate_graph_cache()
     return {"status": "success", "deleted_id": diary_id}
+
+# ----------------- 回响（批注）API -----------------
+
+@app.post("/api/diaries/{diary_id}/echoes", response_model=DiaryEchoOut)
+def create_diary_echo(diary_id: int, payload: DiaryEchoCreate, db: Session = Depends(get_db)):
+    content = (payload.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="回响内容不能为空")
+    diary = db.query(Diary).filter(Diary.id == diary_id).first()
+    if not diary:
+        raise HTTPException(status_code=404, detail="日记不存在")
+    now = datetime.datetime.now()
+    echo = DiaryEcho(diary_id=diary_id, content=content, created_at=now, updated_at=now)
+    db.add(echo)
+    db.commit()
+    db.refresh(echo)
+    return echo
+
+@app.put("/api/echoes/{echo_id}", response_model=DiaryEchoOut)
+def update_diary_echo(echo_id: int, payload: DiaryEchoUpdate, db: Session = Depends(get_db)):
+    content = (payload.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="回响内容不能为空")
+    echo = db.query(DiaryEcho).filter(DiaryEcho.id == echo_id).first()
+    if not echo:
+        raise HTTPException(status_code=404, detail="未找到该条回响")
+    echo.content = content
+    echo.updated_at = datetime.datetime.now()
+    db.commit()
+    db.refresh(echo)
+    return echo
+
+@app.delete("/api/echoes/{echo_id}")
+def delete_diary_echo(echo_id: int, db: Session = Depends(get_db)):
+    echo = db.query(DiaryEcho).filter(DiaryEcho.id == echo_id).first()
+    if not echo:
+        raise HTTPException(status_code=404, detail="未找到该条回响")
+    db.delete(echo)
+    db.commit()
+    return {"status": "deleted", "id": echo_id}
 
 # ----------------- 2D 平面力导向聚类星系图 API -----------------
 
@@ -423,18 +464,33 @@ def update_diary_entities(diary_id: int, payload: DiaryEntitiesUpdate, db: Sessi
 def export_diaries(db: Session = Depends(get_db)):
     items = (
         db.query(Diary)
-        .options(joinedload(Diary.entities).joinedload(DiaryEntity.entity))
+        .options(
+            joinedload(Diary.entities).joinedload(DiaryEntity.entity),
+            joinedload(Diary.echoes),
+        )
         .order_by(Diary.created_at.desc())
         .all()
     )
     exported = []
     for d in items:
+        sorted_echoes = sorted(
+            d.echoes or [],
+            key=lambda e: (e.created_at or datetime.datetime.min, e.id or 0),
+        )
         exported.append({
             "content": d.content,
             "created_at": d.created_at.isoformat() if d.created_at else None,
             "mood": d.mood,
             "summary": d.summary,
-            "entities": [b.entity.name for b in d.entities if b.entity]
+            "entities": [b.entity.name for b in d.entities if b.entity],
+            "echoes": [
+                {
+                    "content": e.content,
+                    "created_at": e.created_at.isoformat() if e.created_at else None,
+                    "updated_at": e.updated_at.isoformat() if e.updated_at else None,
+                }
+                for e in sorted_echoes
+            ],
         })
 
     kb_data = knowledge_base.get_all()
@@ -505,6 +561,38 @@ def import_diaries(payload: DiaryImportRequest, db: Session = Depends(get_db)):
                 db.add(EntityRelation(diary_id=None, source_name=s, relation=r_type, target_name=t))
         db.commit()
 
+    def _to_naive_local(dt_val: datetime.datetime | None) -> datetime.datetime:
+        if dt_val is None:
+            return datetime.datetime.now()
+        if dt_val.tzinfo is not None:
+            return dt_val.astimezone().replace(tzinfo=None)
+        return dt_val
+
+    def _import_echoes_for_diary(target_diary_id: int, echo_items):
+        if not echo_items:
+            return
+        existing_echoes = db.query(DiaryEcho).filter(DiaryEcho.diary_id == target_diary_id).all()
+        existing_keys = {(e.content, e.created_at) for e in existing_echoes}
+        added = False
+        for echo_item in echo_items:
+            echo_content = (echo_item.content or "").strip()
+            if not echo_content:
+                continue
+            echo_created = _to_naive_local(echo_item.created_at)
+            echo_updated = _to_naive_local(echo_item.updated_at) if echo_item.updated_at else echo_created
+            if (echo_content, echo_created) in existing_keys:
+                continue
+            db.add(DiaryEcho(
+                diary_id=target_diary_id,
+                content=echo_content,
+                created_at=echo_created,
+                updated_at=echo_updated,
+            ))
+            existing_keys.add((echo_content, echo_created))
+            added = True
+        if added:
+            db.commit()
+
     for item in payload.diaries:
         content = (item.content or "").strip()
         if not content:
@@ -515,11 +603,13 @@ def import_diaries(payload: DiaryImportRequest, db: Session = Depends(get_db)):
         if dt and dt.tzinfo is not None:
             dt = dt.astimezone().replace(tzinfo=None)
 
-        # 去重检查：同内容同时间则跳过
+        # 去重检查：同内容同时间则跳过（但补齐缺失的回响）
         existing_query = db.query(Diary).filter(Diary.content == content)
         if dt:
             existing_query = existing_query.filter(Diary.created_at == dt)
-        if existing_query.first():
+        existing_diary = existing_query.first()
+        if existing_diary:
+            _import_echoes_for_diary(existing_diary.id, item.echoes)
             skipped_count += 1
             continue
 
@@ -527,6 +617,8 @@ def import_diaries(payload: DiaryImportRequest, db: Session = Depends(get_db)):
         if item.mood:
             diary.mood = item.mood.strip()
             db.commit()
+
+        _import_echoes_for_diary(diary.id, item.echoes)
 
         # 若导出数据已包含标签，提前关联
         if item.entities:

@@ -7,11 +7,11 @@ import numpy as np
 from typing import List, Dict, Any, Set, Optional
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
-from app.models import Diary, Entity, EntityRelation, DiaryEntity, DiaryQuote
+from app.models import Diary, Entity, EntityRelation, DiaryEntity, DiaryQuote, DiaryEcho
 from app.services.llm_client import llm_service
 from app.services.vector_store import vector_store
 from app.schemas import (
-    SearchResultItem, SearchResponse, DiaryOut, DiaryQuoteRef, GraphResponse, GraphNode, GraphLink,
+    SearchResultItem, SearchResponse, DiaryOut, DiaryQuoteRef, DiaryEchoOut, GraphResponse, GraphNode, GraphLink,
     EntityGraphNode, EntityGraphLink, EntityGraphResponse
 )
 from app.database import SessionLocal
@@ -148,8 +148,24 @@ class MemoryEngine:
                     db.add(DiaryQuote(diary_id=diary_id, quoted_diary_id=qid))
         db.commit()
 
+    def _fetch_echoes_map(self, db: Session, diary_ids: List[int]) -> Dict[int, List[DiaryEchoOut]]:
+        """批量查询指定日记列表的回响/批注"""
+        echoes_map: Dict[int, List[DiaryEchoOut]] = {did: [] for did in diary_ids}
+        if not diary_ids:
+            return echoes_map
+        rows = (
+            db.query(DiaryEcho)
+            .filter(DiaryEcho.diary_id.in_(diary_ids))
+            .order_by(DiaryEcho.created_at.asc(), DiaryEcho.id.asc())
+            .all()
+        )
+        for row in rows:
+            if row.diary_id in echoes_map:
+                echoes_map[row.diary_id].append(DiaryEchoOut.model_validate(row))
+        return echoes_map
+
     def build_diary_out_list(self, db: Session, diaries: List[Diary]) -> List[DiaryOut]:
-        """批量组装 DiaryOut，包含实体标签、情绪色及双向引用关系"""
+        """批量组装 DiaryOut，包含实体标签、情绪色、双向引用关系及回响"""
         if not diaries:
             return []
 
@@ -191,6 +207,8 @@ class MemoryEngine:
             if q.quoted_diary_id in quoted_by_map and q.diary_id in diary_map:
                 quoted_by_map[q.quoted_diary_id].append(_to_ref(diary_map[q.diary_id]))
 
+        echoes_map = self._fetch_echoes_map(db, diary_ids)
+
         results: List[DiaryOut] = []
         color_backfilled = False
         for d in diaries:
@@ -209,6 +227,7 @@ class MemoryEngine:
                 entities=[b.entity.name for b in d.entities if b.entity],
                 quoted_diaries=quoted_map.get(d.id, []),
                 quoted_by=quoted_by_sorted,
+                echoes=echoes_map.get(d.id, []),
             ))
         if color_backfilled:
             db.commit()
@@ -697,14 +716,16 @@ class MemoryEngine:
             did for did, _ in sorted(vector_diary_scores.items(), key=lambda kv: kv[1], reverse=True)
         ]
 
-        # 4. 关键词全文召回（始终参与 RRF 融合，避免精确词被向量淹没）
+        # 4. 关键词全文召回（始终参与 RRF 融合，避免精确词被向量淹没，同时覆盖回响内容）
         terms = [t.strip() for t in re.split(r'[\s,，。！？、；;]+', query) if t.strip()]
         if not terms:
             terms = [query]
         term_filters = []
+        echo_filters = []
         for t in terms[:6]:
             term_filters.append(Diary.content.ilike(f"%{t}%"))
             term_filters.append(Diary.summary.ilike(f"%{t}%"))
+            echo_filters.append(DiaryEcho.content.ilike(f"%{t}%"))
         keyword_candidates = (
             db.query(Diary.id, Diary.content, Diary.summary, Diary.created_at)
             .filter(or_(*term_filters))
@@ -712,12 +733,36 @@ class MemoryEngine:
             .limit(max(limit * 2, 40))
             .all()
         )
-        keyword_hits: Dict[int, int] = {}
+        echo_candidates = (
+            db.query(DiaryEcho.diary_id, DiaryEcho.content)
+            .filter(or_(*echo_filters))
+            .all()
+        )
+        echo_texts_by_diary: Dict[int, List[str]] = {}
+        for ec in echo_candidates:
+            echo_texts_by_diary.setdefault(ec.diary_id, []).append(ec.content or "")
+
+        candidate_haystacks: Dict[int, str] = {}
         for row in keyword_candidates:
-            haystack = f"{row.summary or ''}\n{row.content or ''}".lower()
+            candidate_haystacks[row.id] = f"{row.summary or ''}\n{row.content or ''}"
+        for did, e_texts in echo_texts_by_diary.items():
+            joined_echoes = "\n".join(e_texts)
+            if did in candidate_haystacks:
+                candidate_haystacks[did] = f"{candidate_haystacks[did]}\n{joined_echoes}"
+            else:
+                candidate_haystacks[did] = joined_echoes
+
+        keyword_hits: Dict[int, int] = {}
+        echo_matched_ids: Set[int] = set()
+        for did, raw_haystack in candidate_haystacks.items():
+            haystack = raw_haystack.lower()
             hit_cnt = sum(1 for t in terms if t.lower() in haystack)
             if hit_cnt > 0:
-                keyword_hits[row.id] = hit_cnt
+                keyword_hits[did] = hit_cnt
+                if did in echo_texts_by_diary:
+                    echo_haystack = "\n".join(echo_texts_by_diary[did]).lower()
+                    if any(t.lower() in echo_haystack for t in terms):
+                        echo_matched_ids.add(did)
         keyword_ranked_ids = [
             did for did, _ in sorted(keyword_hits.items(), key=lambda kv: kv[1], reverse=True)
         ]
@@ -743,6 +788,7 @@ class MemoryEngine:
             .all()
         )
         diary_map = {d.id: d for d in diaries}
+        echoes_map = self._fetch_echoes_map(db, list(diary_map.keys()))
 
         result_items: List[SearchResultItem] = []
         color_backfilled = False
@@ -759,6 +805,8 @@ class MemoryEngine:
             reasons: List[str] = []
             if g_info:
                 reasons.extend(g_info["reasons"])
+            if did in echo_matched_ids:
+                reasons.append("回响命中")
             if k_hits > 0:
                 reasons.append(f"包含「{query}」" if len(terms) == 1 else f"匹配 {k_hits} 个关键词")
             if not reasons and v_score > 0:
@@ -780,7 +828,8 @@ class MemoryEngine:
                 mood_color=color,
                 score=round(float(final_score) * 10, 3),
                 matched_reason=" · ".join(reasons[:3]),
-                related_entities=rel_ents
+                related_entities=rel_ents,
+                echoes=echoes_map.get(d.id, []),
             ))
 
         if color_backfilled:

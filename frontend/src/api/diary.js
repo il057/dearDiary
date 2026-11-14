@@ -120,6 +120,18 @@ export const diaryApi = {
     return api.delete(`/diaries/${id}`)
   },
 
+  createEcho(diaryId, content) {
+    return api.post(`/diaries/${diaryId}/echoes`, { content })
+  },
+
+  updateEcho(echoId, content) {
+    return api.put(`/echoes/${echoId}`, { content })
+  },
+
+  deleteEcho(echoId) {
+    return api.delete(`/echoes/${echoId}`)
+  },
+
   exportDiaries() {
     return api.get('/export')
   },

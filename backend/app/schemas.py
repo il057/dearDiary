@@ -81,6 +81,25 @@ class DiaryQuoteRef(BaseModel):
     class Config:
         from_attributes = True
 
+class DiaryEchoCreate(BaseModel):
+    content: str = Field(..., description="回响/批注内容")
+
+
+class DiaryEchoUpdate(BaseModel):
+    content: str = Field(..., description="更新后的回响/批注内容")
+
+
+class DiaryEchoOut(BaseModel):
+    id: int
+    diary_id: int
+    content: str
+    created_at: datetime.datetime
+    updated_at: Optional[datetime.datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class DiaryOut(BaseModel):
     id: int
     content: str
@@ -91,6 +110,7 @@ class DiaryOut(BaseModel):
     entities: List[str] = []
     quoted_diaries: List[DiaryQuoteRef] = []
     quoted_by: List[DiaryQuoteRef] = []
+    echoes: List[DiaryEchoOut] = []
 
     class Config:
         from_attributes = True
@@ -105,6 +125,7 @@ class SearchResultItem(BaseModel):
     score: float = 0.0
     matched_reason: str = "语义向量相似"
     related_entities: List[str] = []
+    echoes: List[DiaryEchoOut] = []
 
 class SearchResponse(BaseModel):
     query: str
@@ -131,11 +152,17 @@ class GraphResponse(BaseModel):
     nodes: List[GraphNode] = []
     links: List[GraphLink] = []
 
+class DiaryEchoImportItem(BaseModel):
+    content: str
+    created_at: Optional[datetime.datetime] = None
+    updated_at: Optional[datetime.datetime] = None
+
 class DiaryImportItem(BaseModel):
     content: str
     created_at: Optional[datetime.datetime] = None
     mood: Optional[str] = None
     entities: Optional[List[str]] = []
+    echoes: Optional[List[DiaryEchoImportItem]] = []
 
 class DiaryImportRequest(BaseModel):
     diaries: List[DiaryImportItem]

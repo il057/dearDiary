@@ -28,6 +28,12 @@ class Diary(Base):
         back_populates="quoted_diary",
         cascade="all, delete-orphan"
     )
+    echoes = relationship(
+        "DiaryEcho",
+        back_populates="diary",
+        cascade="all, delete-orphan",
+        order_by="DiaryEcho.created_at.asc(), DiaryEcho.id.asc()"
+    )
 
 
 class Entity(Base):
@@ -89,4 +95,19 @@ class DiaryQuote(Base):
 
     diary = relationship("Diary", foreign_keys=[diary_id], back_populates="quote_links")
     quoted_diary = relationship("Diary", foreign_keys=[quoted_diary_id], back_populates="quoted_by_links")
+
+
+class DiaryEcho(Base):
+    """
+    日记回响（事后批注/解码）：依附于原日记，不参与 AI 分析，可被关键词检索
+    """
+    __tablename__ = "diary_echoes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    diary_id = Column(Integer, ForeignKey("diaries.id", ondelete="CASCADE"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now, index=True)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
+
+    diary = relationship("Diary", back_populates="echoes")
 
