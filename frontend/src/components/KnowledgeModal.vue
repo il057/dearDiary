@@ -138,22 +138,71 @@
             <!-- 新增关系 -->
             <div class="space-y-2">
               <div class="grid grid-cols-3 gap-1.5">
-                <input
-                  v-model="newRelSource"
-                  placeholder="主体（如：阿哲）"
-                  class="w-full bg-[#050505] border border-[#1e1e26] rounded-xs px-2.5 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-[#dc143c] transition-colors"
-                />
+                <div class="relative">
+                  <input
+                    v-model="newRelSource"
+                    placeholder="主体"
+                    @focus="openDropdown('new-source')"
+                    @input="openDropdown('new-source')"
+                    @blur="closeDropdown"
+                    @keydown="handleDropdownKeydown($event, 'new-source', val => newRelSource = val)"
+                    class="w-full bg-[#050505] border border-[#1e1e26] rounded-xs px-2.5 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-[#dc143c] transition-colors"
+                  />
+                  <div
+                    v-if="activeDropdown === 'new-source' && dropdownOptions.length > 0"
+                    class="absolute left-0 right-0 top-full mt-1 z-30 bg-[#0b0b10] border border-[#2a2a35] rounded-xs shadow-xl max-h-44 overflow-y-auto py-1"
+                  >
+                    <button
+                      v-for="(opt, idx) in dropdownOptions"
+                      :key="opt.name"
+                      type="button"
+                      @mousedown.prevent="selectDropdownOption(opt.name, val => newRelSource = val)"
+                      :class="[
+                        'w-full px-2.5 py-1.5 text-left text-xs flex items-center justify-between gap-1.5 cursor-pointer transition-colors',
+                        idx === highlightedIndex ? 'bg-[#1a0b10] text-white' : 'text-zinc-300 hover:bg-[#14141c]'
+                      ]"
+                    >
+                      <span class="truncate">{{ opt.name }}</span>
+                      <span class="text-[10px] text-zinc-500 shrink-0">{{ opt.label }}</span>
+                    </button>
+                  </div>
+                </div>
+
                 <input
                   v-model="newRelType"
-                  placeholder="关系（如：朋友）"
+                  placeholder="关系"
                   class="w-full bg-[#050505] border border-[#1e1e26] rounded-xs px-2.5 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-[#dc143c] transition-colors"
                 />
-                <input
-                  v-model="newRelTarget"
-                  placeholder="客体（如：豆包）"
-                  class="w-full bg-[#050505] border border-[#1e1e26] rounded-xs px-2.5 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-[#dc143c] transition-colors"
-                  @keydown.enter="handleAddRelation"
-                />
+
+                <div class="relative">
+                  <input
+                    v-model="newRelTarget"
+                    placeholder="客体"
+                    @focus="openDropdown('new-target')"
+                    @input="openDropdown('new-target')"
+                    @blur="closeDropdown"
+                    @keydown="handleDropdownKeydown($event, 'new-target', val => newRelTarget = val, handleAddRelation)"
+                    class="w-full bg-[#050505] border border-[#1e1e26] rounded-xs px-2.5 py-1.5 text-zinc-100 text-xs focus:outline-none focus:border-[#dc143c] transition-colors"
+                  />
+                  <div
+                    v-if="activeDropdown === 'new-target' && dropdownOptions.length > 0"
+                    class="absolute left-0 right-0 top-full mt-1 z-30 bg-[#0b0b10] border border-[#2a2a35] rounded-xs shadow-xl max-h-44 overflow-y-auto py-1"
+                  >
+                    <button
+                      v-for="(opt, idx) in dropdownOptions"
+                      :key="opt.name"
+                      type="button"
+                      @mousedown.prevent="selectDropdownOption(opt.name, val => newRelTarget = val)"
+                      :class="[
+                        'w-full px-2.5 py-1.5 text-left text-xs flex items-center justify-between gap-1.5 cursor-pointer transition-colors',
+                        idx === highlightedIndex ? 'bg-[#1a0b10] text-white' : 'text-zinc-300 hover:bg-[#14141c]'
+                      ]"
+                    >
+                      <span class="truncate">{{ opt.name }}</span>
+                      <span class="text-[10px] text-zinc-500 shrink-0">{{ opt.label }}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
               <button
                 @click="handleAddRelation"
@@ -180,19 +229,68 @@
                 >
                   <div v-if="editingRelId === rel.id" class="space-y-1.5">
                     <div class="grid grid-cols-3 gap-1">
-                      <input
-                        v-model="editRelForm.source_name"
-                        class="bg-[#050505] border border-[#2a2a35] rounded-xs px-2 py-1 text-xs text-zinc-100 focus:outline-none focus:border-[#dc143c]"
-                      />
+                      <div class="relative">
+                        <input
+                          v-model="editRelForm.source_name"
+                          @focus="openDropdown('edit-source')"
+                          @input="openDropdown('edit-source')"
+                          @blur="closeDropdown"
+                          @keydown="handleDropdownKeydown($event, 'edit-source', val => editRelForm.source_name = val)"
+                          class="w-full bg-[#050505] border border-[#2a2a35] rounded-xs px-2 py-1 text-xs text-zinc-100 focus:outline-none focus:border-[#dc143c]"
+                        />
+                        <div
+                          v-if="activeDropdown === 'edit-source' && dropdownOptions.length > 0"
+                          class="absolute left-0 right-0 top-full mt-1 z-30 bg-[#0b0b10] border border-[#2a2a35] rounded-xs shadow-xl max-h-36 overflow-y-auto py-1"
+                        >
+                          <button
+                            v-for="(opt, idx) in dropdownOptions"
+                            :key="opt.name"
+                            type="button"
+                            @mousedown.prevent="selectDropdownOption(opt.name, val => editRelForm.source_name = val)"
+                            :class="[
+                              'w-full px-2 py-1 text-left text-xs flex items-center justify-between gap-1 cursor-pointer transition-colors',
+                              idx === highlightedIndex ? 'bg-[#1a0b10] text-white' : 'text-zinc-300 hover:bg-[#14141c]'
+                            ]"
+                          >
+                            <span class="truncate">{{ opt.name }}</span>
+                            <span class="text-[10px] text-zinc-500 shrink-0">{{ opt.label }}</span>
+                          </button>
+                        </div>
+                      </div>
+
                       <input
                         v-model="editRelForm.relation"
                         class="bg-[#050505] border border-[#2a2a35] rounded-xs px-2 py-1 text-xs text-zinc-100 focus:outline-none focus:border-[#dc143c]"
                       />
-                      <input
-                        v-model="editRelForm.target_name"
-                        class="bg-[#050505] border border-[#2a2a35] rounded-xs px-2 py-1 text-xs text-zinc-100 focus:outline-none focus:border-[#dc143c]"
-                        @keydown.enter="saveEditRelation(rel.id)"
-                      />
+
+                      <div class="relative">
+                        <input
+                          v-model="editRelForm.target_name"
+                          @focus="openDropdown('edit-target')"
+                          @input="openDropdown('edit-target')"
+                          @blur="closeDropdown"
+                          @keydown="handleDropdownKeydown($event, 'edit-target', val => editRelForm.target_name = val, () => saveEditRelation(rel.id))"
+                          class="w-full bg-[#050505] border border-[#2a2a35] rounded-xs px-2 py-1 text-xs text-zinc-100 focus:outline-none focus:border-[#dc143c]"
+                        />
+                        <div
+                          v-if="activeDropdown === 'edit-target' && dropdownOptions.length > 0"
+                          class="absolute left-0 right-0 top-full mt-1 z-30 bg-[#0b0b10] border border-[#2a2a35] rounded-xs shadow-xl max-h-36 overflow-y-auto py-1"
+                        >
+                          <button
+                            v-for="(opt, idx) in dropdownOptions"
+                            :key="opt.name"
+                            type="button"
+                            @mousedown.prevent="selectDropdownOption(opt.name, val => editRelForm.target_name = val)"
+                            :class="[
+                              'w-full px-2 py-1 text-left text-xs flex items-center justify-between gap-1 cursor-pointer transition-colors',
+                              idx === highlightedIndex ? 'bg-[#1a0b10] text-white' : 'text-zinc-300 hover:bg-[#14141c]'
+                            ]"
+                          >
+                            <span class="truncate">{{ opt.name }}</span>
+                            <span class="text-[10px] text-zinc-500 shrink-0">{{ opt.label }}</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                     <div class="flex justify-end space-x-2 text-[11px]">
                       <button @click="editingRelId = null" class="text-zinc-500 hover:text-zinc-300 cursor-pointer">取消</button>
@@ -351,6 +449,8 @@ const newRelType = ref('')
 const newRelTarget = ref('')
 const editingRelId = ref(null)
 const editRelForm = ref({ source_name: '', relation: '', target_name: '' })
+const activeDropdown = ref(null)
+const highlightedIndex = ref(-1)
 const searchQuery = ref('')
 const activeCategory = ref('all')
 
@@ -393,6 +493,89 @@ const filteredEntities = computed(() => {
     return matchCat && matchSearch
   })
 })
+
+const typeLabelMap = {
+  person: '人',
+  pet: '宠',
+  place: '地',
+  time: '时',
+  concept: '概'
+}
+
+const allEntityOptions = computed(() => {
+  const seen = new Set()
+  const opts = []
+  const owner = (ownerName.value || '我').trim()
+  if (owner) {
+    seen.add(owner)
+    opts.push({ name: owner, label: '本人' })
+  }
+  for (const ent of entitiesList.value) {
+    if (!seen.has(ent.name)) {
+      seen.add(ent.name)
+      opts.push({ name: ent.name, label: typeLabelMap[ent.entity_type] || '概' })
+    }
+  }
+  return opts
+})
+
+const getActiveDropdownQuery = () => {
+  if (activeDropdown.value === 'new-source') return newRelSource.value
+  if (activeDropdown.value === 'new-target') return newRelTarget.value
+  if (activeDropdown.value === 'edit-source') return editRelForm.value.source_name
+  if (activeDropdown.value === 'edit-target') return editRelForm.value.target_name
+  return ''
+}
+
+const dropdownOptions = computed(() => {
+  if (!activeDropdown.value) return []
+  const q = (getActiveDropdownQuery() || '').trim().toLowerCase()
+  const list = q
+    ? allEntityOptions.value.filter(opt => opt.name.toLowerCase().includes(q))
+    : allEntityOptions.value
+  return list.slice(0, 12)
+})
+
+const openDropdown = (key) => {
+  activeDropdown.value = key
+  highlightedIndex.value = -1
+}
+
+const closeDropdown = () => {
+  activeDropdown.value = null
+  highlightedIndex.value = -1
+}
+
+const selectDropdownOption = (name, setter) => {
+  setter(name)
+  closeDropdown()
+}
+
+const handleDropdownKeydown = (e, key, setter, onEnterSubmit = null) => {
+  const opts = dropdownOptions.value
+  if (e.key === 'ArrowDown') {
+    if (activeDropdown.value !== key) openDropdown(key)
+    if (opts.length > 0) {
+      e.preventDefault()
+      highlightedIndex.value = (highlightedIndex.value + 1) % opts.length
+    }
+  } else if (e.key === 'ArrowUp') {
+    if (activeDropdown.value === key && opts.length > 0) {
+      e.preventDefault()
+      highlightedIndex.value = (highlightedIndex.value - 1 + opts.length) % opts.length
+    }
+  } else if (e.key === 'Enter') {
+    if (activeDropdown.value === key && highlightedIndex.value >= 0 && opts[highlightedIndex.value]) {
+      e.preventDefault()
+      selectDropdownOption(opts[highlightedIndex.value].name, setter)
+    } else if (onEnterSubmit) {
+      closeDropdown()
+      onEnterSubmit()
+    }
+  } else if (e.key === 'Escape') {
+    closeDropdown()
+  }
+}
 
 const filteredRelations = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()

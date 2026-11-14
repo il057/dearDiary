@@ -224,7 +224,7 @@ def get_knowledge(db: Session = Depends(get_db)):
 
     relations = []
     seen_triples = set()
-    for r in db.query(EntityRelation).order_by(EntityRelation.id.desc()).all():
+    for r in db.query(EntityRelation).filter(EntityRelation.relation != "alias_of").order_by(EntityRelation.id.desc()).all():
         triple = (r.source_name, r.relation, r.target_name)
         if triple in seen_triples:
             continue

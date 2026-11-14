@@ -138,31 +138,30 @@ class LLMClient:
             kb_hint_lines.append(f"已知别名映射：{', '.join(known_aliases)}")
         kb_hint = "\n".join(kb_hint_lines)
 
-        system_prompt = f"""你是私密日记语义理解与记忆图谱构建助手。请从日记中提取结构化记忆，严格输出合法 JSON（不要 Markdown 代码块或额外解释）。
+        system_prompt = f"""你是私密日记语义理解与记忆图谱构建助手。请提取结构化记忆并严格输出合法 JSON（不要 Markdown 代码块或额外解释），实体名与关系词统一使用简体中文（专有名词或英文除外）。
 
 输出 Schema：
 {{
-  "summary": "10-20字的一句话核心提炼，概括日记主要事件或感悟",
-  "mood": "必填，2-4字心境情绪或基调词（如：怀念、释怀、烦躁、平静、欣慰、充实、惬意、日常），严禁留空或输出“无”",
+  "summary": "10-20字的一句话核心提炼",
+  "mood": "必填，2-4字情绪或基调词（如：怀念、释怀、烦躁、平静、充实、惬意）",
   "entities": [
     {{"name": "实体名", "entity_type": "person|pet|place|time|concept"}}
   ],
   "relations": [
-    {{"source": "主体实体名", "relation": "关系词", "target": "客体实体名"}}
+    {{"source": "主体", "relation": "关系词", "target": "客体"}}
   ]
 }}
 
-提取准则：
-1. entities 仅提取文中真实出现或明确指代的具象要素：
-   - person：具体人物姓名、称谓或昵称（如：阿哲、妈妈、李医生）
-   - pet：宠物名或动物（如：团子、橘猫）
-   - place：具体地点、城市、店铺或场景（如：西湖、老家、公司楼下咖啡馆）
-   - concept：核心事件、物品、项目或意象（如：毕业旅行、吉他、考研、桂花树）
-   - time：仅当回忆过去的特定年份时提取绝对年份（如“2019年”）。若文中出现“五年前”“前年”等可结合写作年份明确折算的表述，请折算为具体年份（如写于2026年且提“三年前”，则提取“2023年”）。严禁提取日记自身写作年份，严禁提取“小时候”“以前”“最近”等无法确定年份的模糊词。
-   - 严禁将第一人称或泛指代词、虚词放入 entities（如：我、你、他、她、作者、用户、自己、大家、别人、一切、所有、东西、事情、今天、现在）。
-2. relations 仅提取文中明确体现的实体间关系，优先使用规范关系词（朋友、家人、同事、恋人、位于、养了、喜欢、参与、发生于）：
-   - 若关系涉及日记中的第一人称“我”，source 或 target 请统一填写「{owner_name}」（严禁输出“作者”或“用户”）。
-   - 其他实体尽量对应 entities 或已知实体。
+提取准则（宁缺毋滥）：
+1. entities 仅提取具有长期记忆价值的具象要素，禁止提取代词、泛称（如：我、大家、朋友、女生、房间）、抽象情绪或日常碎物：
+   - person：具体姓名、昵称或特定亲友（如：阿哲、妈妈、李医生）
+   - pet：具体宠物名或特定动物（如：豆包、橘猫）
+   - place：具体城市、地标、学校或店铺（如：西湖、老家、街角咖啡馆）
+   - concept：核心事件、重要物品、作品或长期项目（如：毕业旅行、吉他、考研）
+   - time：仅提取明确的过去年份（如“2021年”）；可将“三年前”等相对表述按写作日期折算为具体年份，严禁提取写作当年或“以前”“最近”等模糊词。
+2. relations 仅提取**稳定、长期、事实性**的实体关系，严禁记录一次性动作、梦境、回忆、情绪或时间关联（没有则返回 `[]`）：
+   - 规范关系词：朋友、恋人、前恋人、家人、同事、同学、位于、属于、包含、居住于、就读于、养了、喜欢（仅限长期偏好）。
+   - 第一人称“我”统一写为「{owner_name}」；禁止主体与客体相同。
 
 示例：
 输入（写于 2026年05月10日）：
@@ -292,20 +291,40 @@ class LLMClient:
                 mood_str = "平静"
 
             stop_words = {
-                "你", "我", "他", "她", "它", "你们", "我们", "他们", "她们", "它们",
-                "您", "谁", "大家", "别人", "某人", "对方", "自己", "所有人", "每个人",
-                "作者", "用户", "本人", "日记主人",
+                "你", "我", "他", "她", "它", "你们", "我们", "他们", "她们", "它们", "他們",
+                "您", "谁", "大家", "别人", "某人", "对方", "自己", "所有人", "每个人", "任何人",
+                "作者", "用户", "本人", "日记主人", "主体", "客体", "关系词",
                 "有人", "无人", "那个", "这个", "这些", "那些", "某位", "一位", "一个",
                 "一人", "俩人", "两人", "三人", "很多东西", "什么", "怎么", "之所以",
                 "因为", "所以", "如果", "但是", "其实", "虽然", "只是", "感觉", "觉得",
                 "好像", "似乎", "也许", "可能", "大概", "总之", "东西", "日记", "今天",
-                "现在", "那天", "这时候", "那时候", "此时", "当时", "null", "none", "没有",
-                "一切", "所有", "全部", "事情", "很多", "样子", "原因", "时候", "小时候",
-                "去年", "前年", "以前", "当年", "最近", "多年", "几年前"
+                "昨天", "明天", "现在", "那天", "这时候", "那时候", "此时", "当时",
+                "null", "none", "没有", "一切", "所有", "全部", "事情", "很多", "样子",
+                "原因", "时候", "小时候", "去年", "前年", "以前", "当年", "最近", "多年",
+                "几年前", "过去", "過去", "未来", "未來", "时间", "時間",
+                "朋友", "朋友们", "朋友們", "女生", "男生", "女人", "男人", "人", "人们",
+                "房间", "大路", "街边", "货架", "空间", "路灯", "蓝天", "墙", "水", "风",
+                "头发", "纸", "纸巾", "账单", "春天", "夏天", "秋天", "冬天",
+                "悲观", "愧疚", "自责", "悲伤", "脆弱", "压力", "痛苦"
             }
 
             self_aliases = {"我", "作者", "用户", "本人", "自己", "日记主人"}
             rel_stop_words = stop_words - self_aliases
+
+            forbidden_relations = {
+                "alias_of", "关系词", "主体", "客体", "与", "和", "跟", "给", "被", "对",
+                "把", "让", "不是", "仿佛", "类似", "转折", "关于", "提及", "被提及",
+                "发生于", "發生於", "参与", "前往", "去", "梦到", "梦见", "夢到", "夢見",
+                "想起", "回忆", "思考", "感到", "感受", "感悟", "愧疚", "担心", "担忧",
+                "害怕", "羡慕", "希望", "打算", "经历", "处于", "面对", "使用", "保持",
+                "合理化", "依赖", "象征", "导致", "影响", "喝多", "喝多了", "拿着", "端着",
+                "乘坐", "购买", "做了", "写信", "加了", "看", "听", "点", "服用", "饮用",
+                "砸", "收到", "失去", "联系", "还给", "遭遇", "祈求", "命令", "社交",
+                "分手", "表白", "破坏", "说", "跟我说", "让我", "生日", "昵称", "祝福对象",
+                "学习对象", "微博感情状态", "自我剖析", "掌控欲", "心理阴影", "理想化",
+                "渐行渐远", "无法接受", "抗拒", "拥有", "藏起"
+            }
+            transient_rel_prefixes = ("想", "梦", "夢", "感", "被", "跟", "让", "对", "一起")
 
             for e in parsed.get("entities", []):
                 raw_name = str(e.get("name") or "").strip()
@@ -325,14 +344,6 @@ class LLMClient:
                     raw_name = f"{extracted_year}年"
 
                 canonical = knowledge_base.resolve_entity(raw_name)
-                alias_target = knowledge_base.get_alias_mapping_for_name(raw_name)
-                if alias_target and alias_target != raw_name:
-                    clean_relations.append({
-                        "source": raw_name,
-                        "relation": "alias_of",
-                        "target": canonical
-                    })
-
                 user_saved_type = knowledge_base.custom_entities.get(canonical)
                 final_type = user_saved_type if user_saved_type else etype
 
@@ -350,11 +361,17 @@ class LLMClient:
                     s and rel and t
                     and s.lower() not in rel_stop_words
                     and t.lower() not in rel_stop_words
-                    and len(s) <= 15 and len(t) <= 15 and len(rel) <= 12
+                    and rel.lower() not in forbidden_relations
+                    and not rel.startswith(transient_rel_prefixes)
+                    and len(s) <= 12 and len(t) <= 12 and len(rel) <= 6
                 ):
                     rs = owner_name if s in self_aliases else knowledge_base.resolve_entity(s)
                     rt = owner_name if t in self_aliases else knowledge_base.resolve_entity(t)
-                    if rs != rt:
+                    if (
+                        rs != rt
+                        and rs.lower() not in rel_stop_words
+                        and rt.lower() not in rel_stop_words
+                    ):
                         clean_relations.append({
                             "source": rs,
                             "relation": rel,
@@ -371,12 +388,6 @@ class LLMClient:
             c_name = c["name"]
             if c_name not in clean_entities_map:
                 clean_entities_map[c_name] = c
-            if c.get("alias_source"):
-                clean_relations.append({
-                    "source": c["alias_source"],
-                    "relation": "alias_of",
-                    "target": c_name
-                })
 
         final_entities = list(clean_entities_map.values())
         knowledge_base.auto_register_entities(final_entities)

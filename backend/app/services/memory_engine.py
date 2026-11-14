@@ -620,6 +620,7 @@ class MemoryEngine:
                 entity_reason_map[ent.name] = f"标签「{ent.name}」"
 
             relations = db.query(EntityRelation).filter(
+                EntityRelation.relation != "alias_of",
                 or_(EntityRelation.source_name == ent.name, EntityRelation.target_name == ent.name)
             ).all()
 
@@ -909,7 +910,7 @@ class MemoryEngine:
 
         links: List[EntityGraphLink] = []
         seen_triples: Set[tuple] = set()
-        for rel in db.query(EntityRelation).order_by(EntityRelation.id.desc()).all():
+        for rel in db.query(EntityRelation).filter(EntityRelation.relation != "alias_of").order_by(EntityRelation.id.desc()).all():
             triple = (rel.source_name, rel.relation, rel.target_name)
             if triple in seen_triples:
                 continue

@@ -183,7 +183,7 @@ def get_analytics_overview(db: Session, range_key: str = "all") -> Dict[str, Any
         ]
 
     # 高频实体关系（若在时间范围内，优先统计该范围内日记提取的关系 + 手动关系）
-    rel_query = db.query(EntityRelation)
+    rel_query = db.query(EntityRelation).filter(EntityRelation.relation != "alias_of")
     if cutoff is not None and diary_ids_in_range:
         rel_query = rel_query.filter(
             (EntityRelation.diary_id.in_(diary_ids_in_range)) | (EntityRelation.diary_id.is_(None))
