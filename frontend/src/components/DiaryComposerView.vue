@@ -1,20 +1,21 @@
 <template>
   <div class="fixed inset-0 z-50 bg-[#050505] flex flex-col text-zinc-100 select-text overflow-hidden overscroll-contain animate-in fade-in duration-150">
     <!-- 顶栏控制栏 (极简硬朗细线，适配 iOS PWA 灵动岛安全区) -->
-    <header class="flex items-center justify-between px-4 sm:px-8 pwa-safe-top pb-3.5 border-b border-[#18181f] bg-[#08080a] select-none shrink-0">
-      <div class="flex items-center space-x-3">
+    <header class="flex items-center justify-between gap-2 px-3 sm:px-8 pwa-safe-top pb-3 sm:pb-3.5 border-b border-[#18181f] bg-[#08080a] select-none shrink-0">
+      <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
         <button
           @click="handleClose"
-          class="inline-flex items-center space-x-1.5 px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-[#16161c] rounded-xs border border-neutral-800 transition-colors cursor-pointer"
+          class="inline-flex items-center space-x-1.5 px-2 sm:px-2.5 py-1.5 sm:py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-[#16161c] rounded-xs border border-neutral-800 transition-colors cursor-pointer shrink-0"
+          title="返回"
         >
           <ArrowLeft class="w-3.5 h-3.5" />
-          <span>返回</span>
+          <span class="hidden sm:inline">返回</span>
         </button>
 
-        <div class="flex items-center space-x-2">
-          <span class="text-[#dc143c] text-xs leading-none">✦</span>
-          <span class="text-xs font-semibold text-zinc-200">
-            {{ isBackfillMode ? '补记日记' : '写日记' }}
+        <div class="flex items-center space-x-1.5 sm:space-x-2 min-w-0">
+          <span class="text-[#dc143c] text-xs leading-none shrink-0">✦</span>
+          <span class="text-xs font-semibold text-zinc-200 truncate">
+            {{ isBackfillMode ? '补记' : '写日记' }}
           </span>
           <span class="text-[11px] text-zinc-500 font-mono hidden sm:inline">
             {{ content.trim().length }} 字
@@ -23,12 +24,12 @@
       </div>
 
       <!-- 补档、引用与保存控制 -->
-      <div class="flex items-center space-x-2 sm:space-x-3">
+      <div class="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
         <!-- 引用过往日记 -->
         <button
           type="button"
           @click="isQuotePickerOpen = !isQuotePickerOpen"
-          class="inline-flex items-center space-x-1 px-2.5 py-1 text-xs rounded-xs border transition-colors cursor-pointer"
+          class="inline-flex items-center space-x-1 p-1.5 sm:px-2.5 sm:py-1 text-xs rounded-xs border transition-colors cursor-pointer"
           :class="isQuotePickerOpen || quotedDiaries.length > 0
             ? 'bg-[#180a0e] text-[#f43f5e] border-[#dc143c]/60'
             : 'text-zinc-400 hover:text-zinc-200 bg-neutral-900 border-neutral-800'"
@@ -36,28 +37,28 @@
         >
           <Quote class="w-3.5 h-3.5" />
           <span class="hidden sm:inline">{{ quotedDiaries.length > 0 ? `已引用 (${quotedDiaries.length})` : '引用日记' }}</span>
-          <span class="sm:hidden">{{ quotedDiaries.length > 0 ? quotedDiaries.length : '引用' }}</span>
+          <span v-if="quotedDiaries.length > 0" class="sm:hidden text-[11px] font-mono">{{ quotedDiaries.length }}</span>
         </button>
 
         <!-- 切换补档模式 -->
         <button
           type="button"
           @click="isBackfillMode = !isBackfillMode"
-          class="inline-flex items-center space-x-1 px-2.5 py-1 text-xs rounded-xs border transition-colors cursor-pointer"
+          class="inline-flex items-center sm:space-x-1 p-1.5 sm:px-2.5 sm:py-1 text-xs rounded-xs border transition-colors cursor-pointer"
           :class="isBackfillMode
             ? 'bg-[#180a0e] text-[#f43f5e] border-[#dc143c]/60'
             : 'text-zinc-400 hover:text-zinc-200 bg-neutral-900 border-neutral-800'"
           title="修改日期"
         >
           <CalendarClock class="w-3.5 h-3.5" />
-          <span>{{ isBackfillMode ? '已选日期' : '补记日期' }}</span>
+          <span class="hidden sm:inline">{{ isBackfillMode ? '已选日期' : '补记日期' }}</span>
         </button>
 
         <!-- 提交保存按钮 (Crimson 风格) -->
         <button
           @click="handleSave"
           :disabled="isSubmitting || !content.trim()"
-          class="inline-flex items-center space-x-1.5 px-4 py-1.5 bg-[#dc143c] hover:bg-[#e11d48] text-white font-medium text-xs rounded-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer shadow-[0_0_12px_rgba(220,20,60,0.35)]"
+          class="inline-flex items-center space-x-1.5 px-3 sm:px-4 py-1.5 bg-[#dc143c] hover:bg-[#e11d48] text-white font-medium text-xs rounded-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer shadow-[0_0_12px_rgba(220,20,60,0.35)]"
         >
           <Check class="w-3.5 h-3.5" />
           <span>保存</span>
@@ -70,13 +71,13 @@
       v-if="isBackfillMode"
       class="bg-[#0a0a0d] border-b border-[#18181f] px-4 sm:px-8 py-2.5 flex items-center justify-between flex-wrap gap-2 text-xs select-none"
     >
-      <div class="flex items-center space-x-2">
-        <Calendar class="w-4 h-4 text-[#dc143c]" />
-        <span class="text-zinc-400">日期时间:</span>
+      <div class="flex items-center space-x-2 min-w-0">
+        <Calendar class="w-4 h-4 text-[#dc143c] shrink-0" />
+        <span class="text-zinc-400 hidden sm:inline">日期时间:</span>
         <input
           type="datetime-local"
           v-model="backfillTime"
-          class="bg-[#050505] border border-neutral-800 text-zinc-100 rounded-xs px-2.5 py-1 text-xs outline-none focus:border-[#dc143c]"
+          class="bg-[#050505] border border-neutral-800 text-zinc-100 rounded-xs px-2.5 py-1 text-xs outline-none focus:border-[#dc143c] max-w-full"
         />
       </div>
 
@@ -201,7 +202,11 @@
 
     <!-- 底栏快捷提示 -->
     <footer class="px-4 sm:px-8 pt-2.5 pb-[max(env(safe-area-inset-bottom),0.625rem)] border-t border-[#18181f] bg-[#08080a] flex items-center justify-between text-[11px] text-zinc-600 select-none font-mono">
-      <span><span class="text-[#dc143c] mr-1">✧</span>Ctrl + Enter 快捷保存 · ESC 退出</span>
+      <span>
+        <span class="text-[#dc143c] mr-1">✧</span>
+        <span class="hidden sm:inline">Ctrl + Enter 快捷保存 · ESC 退出</span>
+        <span class="sm:hidden">草稿自动保存</span>
+      </span>
       <span>{{ content.trim().length }} 字</span>
     </footer>
   </div>

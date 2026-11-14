@@ -1,29 +1,27 @@
 <template>
   <div class="fixed inset-0 z-50 bg-[#050505] flex flex-col text-zinc-100 select-text overflow-hidden overscroll-contain animate-in fade-in duration-150">
     <!-- 顶部操作导航条 -->
-    <header class="flex items-center justify-between px-4 sm:px-8 pwa-safe-top pb-3.5 border-b border-[#18181f] bg-[#08080a] select-none shrink-0">
-      <div class="flex items-center space-x-3">
+    <header class="flex items-center justify-between gap-2 px-3 sm:px-8 pwa-safe-top pb-3 sm:pb-3.5 border-b border-[#18181f] bg-[#08080a] select-none shrink-0">
+      <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
         <button
           @click="$emit('close')"
-          class="inline-flex items-center space-x-1.5 px-2.5 py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-[#16161c] rounded-xs border border-neutral-800 transition-colors cursor-pointer"
+          class="inline-flex items-center space-x-1.5 px-2 sm:px-2.5 py-1.5 sm:py-1 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-[#16161c] rounded-xs border border-neutral-800 transition-colors cursor-pointer shrink-0"
+          title="返回"
         >
           <ArrowLeft class="w-3.5 h-3.5" />
-          <span>返回</span>
+          <span class="hidden sm:inline">返回</span>
         </button>
 
-        <div class="flex items-center space-x-2">
-          <span class="text-[#dc143c] text-xs leading-none">✦</span>
-          <span class="text-xs font-semibold text-zinc-200">
-            {{ isEditing ? '编辑日记' : '日记详情' }}
-          </span>
-          <span class="text-[11px] text-zinc-500 font-mono">
-            {{ formatCleanTime(diary.created_at) }}
+        <div class="flex items-center space-x-1.5 sm:space-x-2 min-w-0">
+          <span class="text-[#dc143c] text-xs leading-none shrink-0">✦</span>
+          <span class="text-xs font-semibold text-zinc-200 truncate">
+            {{ isEditing ? '编辑' : '详情' }}
           </span>
         </div>
       </div>
 
       <!-- 右侧操作栏 -->
-      <div class="flex items-center space-x-2">
+      <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
         <template v-if="!isEditing">
           <button
             @click="$emit('reindex', diary.id || diary.diary_id)"
@@ -36,19 +34,20 @@
 
           <button
             @click="$emit('quote', diary)"
-            class="inline-flex items-center space-x-1 px-3 py-1 bg-[#180a0e] hover:bg-[#260e15] text-[#fda4af] rounded-xs border border-[#dc143c]/40 text-xs transition-colors cursor-pointer"
+            class="inline-flex items-center sm:space-x-1 p-1.5 sm:px-3 sm:py-1 bg-[#180a0e] hover:bg-[#260e15] text-[#fda4af] rounded-xs border border-[#dc143c]/40 text-xs transition-colors cursor-pointer"
             title="引用这篇日记并写新感悟"
           >
-            <Quote class="w-3 h-3 text-[#dc143c]" />
-            <span>引用</span>
+            <Quote class="w-3.5 h-3.5 sm:w-3 sm:h-3 text-[#dc143c]" />
+            <span class="hidden sm:inline">引用</span>
           </button>
 
           <button
             @click="startEdit"
-            class="inline-flex items-center space-x-1 px-3 py-1 bg-neutral-900 hover:bg-neutral-800 text-zinc-200 rounded-xs border border-neutral-800 text-xs transition-colors cursor-pointer"
+            class="inline-flex items-center sm:space-x-1 p-1.5 sm:px-3 sm:py-1 bg-neutral-900 hover:bg-neutral-800 text-zinc-200 rounded-xs border border-neutral-800 text-xs transition-colors cursor-pointer"
+            title="编辑"
           >
-            <Pencil class="w-3 h-3 text-[#dc143c]" />
-            <span>编辑</span>
+            <Pencil class="w-3.5 h-3.5 sm:w-3 sm:h-3 text-[#dc143c]" />
+            <span class="hidden sm:inline">编辑</span>
           </button>
 
           <button
@@ -63,38 +62,39 @@
         <template v-else>
           <button
             @click="cancelEdit"
-            class="px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-neutral-900 rounded-xs transition-colors cursor-pointer"
+            class="px-2.5 sm:px-3 py-1 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-neutral-900 rounded-xs transition-colors cursor-pointer"
           >
             取消
           </button>
           <button
             @click="saveEdit"
             :disabled="!editDraftContent.trim()"
-            class="inline-flex items-center space-x-1.5 px-4 py-1 bg-[#dc143c] hover:bg-[#e11d48] text-white text-xs font-medium rounded-xs active:scale-95 disabled:opacity-40 transition-all cursor-pointer shadow-[0_0_10px_rgba(220,20,60,0.3)]"
+            class="inline-flex items-center space-x-1.5 px-3 sm:px-4 py-1 bg-[#dc143c] hover:bg-[#e11d48] text-white text-xs font-medium rounded-xs active:scale-95 disabled:opacity-40 transition-all cursor-pointer shadow-[0_0_10px_rgba(220,20,60,0.3)]"
           >
             <Check class="w-3.5 h-3.5" />
-            <span>保存修改</span>
+            <span class="hidden sm:inline">保存修改</span>
+            <span class="sm:hidden">保存</span>
           </button>
         </template>
       </div>
     </header>
 
     <!-- 主体区域 -->
-    <main class="flex-1 overflow-y-auto px-4 sm:px-12 md:px-24 py-8 max-w-4xl w-full mx-auto space-y-6">
+    <main class="flex-1 overflow-y-auto px-4 sm:px-12 md:px-24 py-5 sm:py-8 pb-[max(env(safe-area-inset-bottom),1.5rem)] max-w-4xl w-full mx-auto space-y-6">
       <!-- 1. 编辑状态 -->
       <div v-if="isEditing" class="space-y-4">
         <!-- 修改时间 -->
-        <div class="flex items-center justify-between p-3 bg-[#0a0a0d] border border-[#18181f] rounded-xs text-xs select-none">
-          <div class="flex items-center space-x-2">
-            <Clock class="w-4 h-4 text-[#dc143c]" />
-            <span class="text-zinc-400">日期时间:</span>
+        <div class="flex flex-wrap items-center justify-between gap-2 p-3 bg-[#0a0a0d] border border-[#18181f] rounded-xs text-xs select-none">
+          <div class="flex items-center space-x-2 min-w-0">
+            <Clock class="w-4 h-4 text-[#dc143c] shrink-0" />
+            <span class="text-zinc-400 hidden sm:inline">日期时间:</span>
             <input
               type="datetime-local"
               v-model="editDraftTime"
-              class="bg-[#050505] border border-neutral-800 text-zinc-100 rounded-xs px-2.5 py-1 text-xs outline-none focus:border-[#dc143c]"
+              class="bg-[#050505] border border-neutral-800 text-zinc-100 rounded-xs px-2.5 py-1 text-xs outline-none focus:border-[#dc143c] max-w-full"
             />
           </div>
-          <span class="text-[11px] text-zinc-500 font-mono">{{ editDraftContent.length }} 字</span>
+          <span class="text-[11px] text-zinc-500 font-mono shrink-0">{{ editDraftContent.length }} 字</span>
         </div>
 
         <!-- 编辑状态下的引用管理 -->
@@ -176,15 +176,15 @@
             @click="$emit('select-related', q.id)"
             class="p-3.5 bg-[#09090d] hover:bg-[#100a0d] border border-[#1c1c24] hover:border-[#dc143c]/50 border-l-2 border-l-[#dc143c] rounded-xs transition-colors cursor-pointer space-y-1.5 group"
           >
-            <div class="flex items-center justify-between text-[11px]">
+            <div class="flex items-center justify-between text-[11px] gap-2">
               <div class="flex items-center space-x-2 min-w-0">
                 <Quote class="w-3 h-3 text-[#dc143c] shrink-0" />
-                <span class="font-mono text-zinc-400">引用自 {{ formatCleanTime(q.created_at) }}</span>
+                <span class="font-mono text-zinc-400 truncate">引用自 {{ formatCleanTime(q.created_at) }}</span>
                 <span v-if="q.mood" class="px-1.5 py-0.2 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/30 rounded-xs text-[10px] shrink-0">
                   {{ q.mood }}
                 </span>
               </div>
-              <span class="text-[10px] text-zinc-600 group-hover:text-[#f43f5e] font-mono transition-colors shrink-0">查看原文 →</span>
+              <span class="text-[10px] text-zinc-600 group-hover:text-[#f43f5e] font-mono transition-colors shrink-0"><span class="hidden sm:inline">查看原文 </span>→</span>
             </div>
             <p class="text-xs sm:text-[13px] text-zinc-300 group-hover:text-zinc-100 line-clamp-3 leading-relaxed">
               {{ q.content }}
@@ -280,15 +280,15 @@
               @click="$emit('select-related', item.id)"
               class="p-3 bg-[#09090d] hover:bg-[#100a0d] border border-[#1c1c24] hover:border-[#dc143c]/50 border-l-2 border-l-[#dc143c]/70 rounded-xs transition-colors cursor-pointer space-y-1.5 group"
             >
-              <div class="flex items-center justify-between text-[11px]">
+              <div class="flex items-center justify-between text-[11px] gap-2">
                 <div class="flex items-center space-x-1.5 min-w-0">
                   <span class="text-xs leading-none shrink-0" :style="{ color: item.mood_color || '#dc143c' }">✦</span>
-                  <span class="font-mono text-zinc-400 shrink-0">{{ formatCleanTime(item.created_at) }}</span>
+                  <span class="font-mono text-zinc-400 truncate">{{ formatCleanTime(item.created_at) }}</span>
                   <span v-if="item.mood" class="px-1.5 py-0.2 bg-[#12080a] text-[#f43f5e] border border-[#dc143c]/30 rounded-xs text-[10px] shrink-0">
                     {{ item.mood }}
                   </span>
                 </div>
-                <span class="text-[10px] text-zinc-600 group-hover:text-[#f43f5e] font-mono shrink-0 ml-2">查看 →</span>
+                <span class="text-[10px] text-zinc-600 group-hover:text-[#f43f5e] font-mono shrink-0"><span class="hidden sm:inline">查看 </span>→</span>
               </div>
               <p class="text-xs text-zinc-300 group-hover:text-zinc-100 line-clamp-2 leading-relaxed">
                 {{ item.content }}
@@ -318,7 +318,7 @@
               @click="$emit('select-related', item.diary_id)"
               class="p-3 bg-[#08080b] hover:bg-[#0e0b0d] border border-[#18181f] hover:border-[#dc143c]/40 rounded-xs transition-colors cursor-pointer space-y-1.5 group"
             >
-              <div class="flex items-center justify-between text-[11px]">
+              <div class="flex items-center justify-between text-[11px] gap-2">
                 <div class="flex items-center space-x-1.5 min-w-0">
                   <span class="text-xs leading-none shrink-0" :style="{ color: item.mood_color || '#dc143c' }">✦</span>
                   <span class="font-mono text-zinc-400 shrink-0">{{ formatCleanTime(item.created_at) }}</span>
@@ -326,7 +326,7 @@
                     {{ item.mood }}
                   </span>
                 </div>
-                <span class="text-[10px] text-[#f43f5e]/80 truncate ml-2">{{ item.matched_reason }}</span>
+                <span class="text-[10px] text-[#f43f5e]/80 truncate">{{ item.matched_reason }}</span>
               </div>
               <p class="text-xs text-zinc-300 group-hover:text-zinc-100 line-clamp-2 leading-relaxed">
                 {{ item.summary || item.content }}

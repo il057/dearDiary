@@ -30,7 +30,7 @@
         :key="day.dateStr"
         type="button"
         @click="handleDayClick(day)"
-        class="group relative z-10 flex flex-col items-center space-y-2 px-2 py-1 transition-all cursor-pointer focus:outline-none"
+        class="group relative z-10 flex flex-col items-center space-y-2 px-1 sm:px-2 py-1 transition-all cursor-pointer focus:outline-none"
         :title="day.hasDiary ? `${day.dateStr} · 共 ${day.count} 篇，点击定位` : (day.isToday ? '今天还未记录，点击立即撰写' : `${day.dateStr} · 无记录`)"
       >
         <!-- 周几 -->

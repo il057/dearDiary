@@ -3,11 +3,11 @@
     <!-- 极简年份索引栏 (水平紧凑滚动，不吸顶，避免移动端重叠) -->
     <div
       v-if="!loading && items.length > 0"
-      class="w-full bg-[#09090c] border border-[#1a1a20] rounded-xs p-2.5 flex items-center justify-between gap-3 text-xs select-none"
+      class="w-full bg-[#09090c] border border-[#1a1a20] rounded-xs p-2 sm:p-2.5 flex items-center justify-between gap-2 sm:gap-3 text-xs select-none"
     >
       <div class="flex items-center space-x-2 shrink-0">
         <span class="text-[#dc143c] text-xs leading-none">✦</span>
-        <span class="text-zinc-400 font-medium font-mono text-[11px]">年份</span>
+        <span class="text-zinc-400 font-medium font-mono text-[11px] hidden sm:inline">年份</span>
       </div>
 
       <!-- 年份胶囊 -->
